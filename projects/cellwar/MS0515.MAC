@@ -25,11 +25,22 @@
 ;   TEXT    print: R0 = the column (0..39, 8 pixels each), R1 = the pixel
 ;           row (0..199), R2 = an .ASCIZ string of ' '..'Z', TATTR as
 ;           above.
+;   KFLUSH  forget the keys pressed so far.
+;   CLRSCR  the screen black.
+;   DRAWBM  draw a picture: R0 = the word column (0..39), R1 = the pixel
+;           row, R2 = the picture - a word of width in words, a word of
+;           height in rows, the address of the pixels (a byte a word,
+;           row by row) and the address of the attributes (a byte a row).
 ;   CLICK   a short click from the speaker: a move refused.
+;   SNDHIT  the sounds of the game: a blow (the clash of a blade), a
+;   SNDMOV  step (a rustle), standing (a thump), a unit made (a whoop).
+;   SNDSTD
+;   SNDNEW
 ;   WAIT    R0 frames of the 50 Hz screen.
 ;   FRAMES  the frame counter, for the tests and for a random seed.
 ;-----------------------------------------------------------------------
-        .GLOBL  HWINIT,HWEXIT,KEY,DRAWC,TEXT,TATTR,CLICK,WAIT,FRAMES
+        .GLOBL  HWINIT,HWEXIT,KEY,KFLUSH,CLRSCR,DRAWC,DRAWBM,TEXT,TATTR
+        .GLOBL  CLICK,SNDHIT,SNDMOV,SNDSTD,SNDNEW,WAIT,FRAMES
         .GLOBL  FONT
         .GLOBL  DSSAVE          ; for the tests
 
@@ -66,10 +77,10 @@ HWINIT: MOV     @#KBVEC,KBSAVE  ; the keyboard's interrupt vector is ours while
         MOV     #DSPOFF,@#DISPAT        ; and the frame interrupt is on from here
         MOVB    #40,RCSHAD      ; 320x200 colour, black border, speaker low
         MOVB    RCSHAD,@#SYSC
-        JSR     PC,CLRVRM       ; the screen black: the console's text was there
+        JSR     PC,CLRSCR       ; the screen black: the console's text was there
         RTS     PC
 
-HWEXIT: JSR     PC,CLRVRM       ; the console finds a clean screen
+HWEXIT: JSR     PC,CLRSCR       ; the console finds a clean screen
         MOVB    #10,@#SYSC      ; the console's 640x200 mode, black border, quiet
         MOV     KBSAVE,@#KBVEC  ; the keyboard back to RT-11
         MOV     KBSAVE+2,@#KBVEC+2
@@ -78,7 +89,7 @@ HWEXIT: JSR     PC,CLRVRM       ; the console finds a clean screen
         MOV     FRSAVE+2,@#FRVEC+2
         RTS     PC
 
-CLRVRM: MFPS    -(SP)
+CLRSCR: MFPS    -(SP)
         MTPS    #340
         MOV     #DSPON,@#DISPAT
         MOV     #VRAM,R0
@@ -111,6 +122,13 @@ KEY:    MOV     KBTAIL,R1
         MOV     R1,KBTAIL
         RTS     PC
 1$:     CLR     R0
+        RTS     PC
+
+KFLUSH: MFPS    -(SP)           ; the ring emptied with KBISR held off
+        MTPS    #340
+        CLR     KBHEAD
+        CLR     KBTAIL
+        MTPS    (SP)+
         RTS     PC
 
 KBRING: .BLKB   16.
@@ -150,6 +168,48 @@ DRAWC:  MOV     R3,-(SP)
         MOV     (SP)+,R4
         MOV     (SP)+,R3
         RTS     PC
+
+; --- DRAWBM: a picture onto the screen --------------------------------
+; A byte of pixels a word, row by row; each row's attribute over all of
+; its words.
+DRAWBM: MOV     R3,-(SP)
+        MOV     R4,-(SP)
+        MOV     R5,-(SP)
+        ASL     R1              ; the first VRAM byte: row * 80 + col * 2
+        ASL     R1
+        ASL     R1
+        ASL     R1
+        MOV     R1,R3
+        ASL     R1
+        ASL     R1
+        ADD     R3,R1
+        ASL     R0
+        ADD     R0,R1
+        ADD     #VRAM,R1
+        MOV     (R2)+,BMW       ; the width in words
+        MOV     (R2)+,R5        ; R5 = the rows to go
+        MOV     (R2)+,R4        ; R4 = the pixels
+        MOV     (R2),R2         ; R2 = the attributes
+        MOV     #DSPON,@#DISPAT
+1$:     MOVB    (R2)+,R3        ; the row's attribute in the high byte
+        SWAB    R3
+        BIC     #377,R3
+        MOV     R1,R0
+        MOV     BMW,BMC
+2$:     MOV     R3,(R0)
+        BISB    (R4)+,(R0)
+        TST     (R0)+           ; the next word (a byte's autoincrement is one)
+        DEC     BMC
+        BNE     2$
+        ADD     #LSTRID,R1
+        SOB     R5,1$
+        MOV     #DSPOFF,@#DISPAT
+        MOV     (SP)+,R5
+        MOV     (SP)+,R4
+        MOV     (SP)+,R3
+        RTS     PC
+BMW:    .WORD   0
+BMC:    .WORD   0
 
 ; --- TEXT: a string onto the screen -----------------------------------
 ; A glyph is 8 bytes of FONT at (character - 32) * 8; it goes over as 8
@@ -196,22 +256,89 @@ TEXT:   MOV     R3,-(SP)
 TATTR:  .BYTE   7
 RCSHAD: .BYTE   0
 
-; --- CLICK: the speaker -----------------------------------------------
+; --- the speaker ------------------------------------------------------
 ; The speaker is register C bit 6 (the timer gate, bit 7, stays off so
-; the line is the program's): toggled forty times, 400 turns apart.
-CLICK:  MOV     #40.,R2
-1$:     MOVB    RCSHAD,R1
-        BIC     #177400,R1
-        MOV     #SPKBIT,R0
-        XOR     R0,R1
-        MOVB    R1,RCSHAD
-        MOVB    R1,@#SYSC
-        MOV     #400.,R0
-2$:     SOB     R0,2$
-        SOB     R2,1$
-        BICB    #SPKBIT,RCSHAD  ; the line low
-        MOVB    RCSHAD,@#SYSC
+; the line is the program's), toggled by SPKTOG.  A sound is a list of
+; parts, each four words: the kind (1 a tone, 2 noise, 0 the end), the
+; half period in turns of a SOB loop (18 clocks, 2.4 us), the step the
+; half period grows by after each toggle (a tone) or the mask of the
+; random part added to it (noise), and the toggles to make.
+SPKTOG: MOVB    RCSHAD,R0
+        BIC     #177400,R0
+        MOV     #SPKBIT,R1
+        XOR     R1,R0
+        MOVB    R0,RCSHAD
+        MOVB    R0,@#SYSC
         RTS     PC
+
+CLICK:  MOV     #SFXCLK,R0
+SOUND:  MOV     R3,-(SP)
+        MOV     R4,-(SP)
+        MOV     R5,-(SP)
+        MOV     R0,R5
+1$:     MOV     (R5)+,R0
+        BEQ     9$
+        MOV     (R5)+,R3        ; R3 = the half period
+        MOV     (R5)+,R4        ; R4 = the step, or the mask
+        MOV     (R5)+,SNDCNT
+        CMP     R0,#2
+        BEQ     5$
+2$:     JSR     PC,SPKTOG       ; a tone
+        MOV     R3,R1
+3$:     SOB     R1,3$
+        ADD     R4,R3
+        DEC     SNDCNT
+        BNE     2$
+        BR      1$
+5$:     JSR     PC,SPKTOG       ; noise: the period a random part longer
+        MOV     SNDSD,R1
+        ASL     R1
+        ASL     R1
+        ADD     SNDSD,R1
+        INC     R1
+        MOV     R1,SNDSD
+        SWAB    R1
+        MOV     R4,R2
+        COM     R2
+        BIC     R2,R1
+        ADD     R3,R1
+6$:     SOB     R1,6$
+        DEC     SNDCNT
+        BNE     5$
+        BR      1$
+9$:     BICB    #SPKBIT,RCSHAD  ; the line low
+        MOVB    RCSHAD,@#SYSC
+        MOV     (SP)+,R5
+        MOV     (SP)+,R4
+        MOV     (SP)+,R3
+        RTS     PC
+SNDCNT: .WORD   0
+SNDSD:  .WORD   12345
+
+SNDHIT: MOV     #SFXHIT,R0
+        BR      SOUND
+SNDMOV: MOV     #SFXMOV,R0
+        BR      SOUND
+SNDSTD: MOV     #SFXSTD,R0
+        BR      SOUND
+SNDNEW: MOV     #SFXNEW,R0
+        BR      SOUND
+
+SFXCLK: .WORD   1,400.,0,40.    ; a click
+        .WORD   0
+SFXHIT: .WORD   2,4,17,40.      ; the clash, then the ring in three steps down
+        .WORD   1,45.,0,150.
+        .WORD   1,60.,0,100.
+        .WORD   1,90.,0,60.
+        .WORD   0
+SFXMOV: .WORD   2,3,37,1200.    ; a rustle that dies away
+        .WORD   2,8.,77,300.
+        .WORD   0
+SFXSTD: .WORD   1,200.,6,60.    ; a thump, falling
+        .WORD   0
+SFXNEW: .WORD   1,200.,-2,80.   ; a whoop: up, then down
+        .WORD   1,40.,2,100.
+        .WORD   0
 
 ; --- WAIT / FRISR: the clock ------------------------------------------
 ; FRISR counts the frames, 50 a second.  (RT-11 has no clock of its own

@@ -81,7 +81,7 @@ TEST_CASE("cellwar: standing raises the stage, and a factory that stands stays a
     CHECK(g.cell(2, 8) == (Unit | Moved | 3));                  // 2 -> factory
     CHECK(g.sel() == index(6, 2));                              // then the factories
     CHECK(g.peek16("PHASE") == 1);
-    g.move(0, 0, 40);                                           // the last move: the round turns
+    g.move(0, 0, 300);                                           // the last move: the round turns
     CHECK(g.peek16("ROUND") == 2);
     CHECK(g.peek16("TURN") == 0);
     CHECK(g.cell(6, 2) == (Unit | 3));                          // a factory still, unmoved again
@@ -256,7 +256,7 @@ TEST_CASE("cellwar: the fog follows a move, the old view lasts the turn and no l
     CHECK(g.seen(7, 6));
     CHECK_FALSE(g.seen(8, 5));
     CHECK(g.seen(2, 2));                                        // the old view lasts the turn
-    g.move(0, 0, 40);                                           // the turn ends, the round turns
+    g.move(0, 0, 300);                                           // the turn ends, the round turns
     REQUIRE(g.peek16("ROUND") == 2);
     CHECK(g.seen(7, 5));
     CHECK_FALSE(g.seen(2, 2));                                  // and is gone with it
@@ -293,7 +293,7 @@ TEST_CASE("cellwar: the computer moves every unit and the round comes back to th
     CellwarGame g("cellwar_round");
     g.setBoard(place({{1, 1, 'I'}, {18, 8, 'i'}, {15, 5, 'f'}, {16, 1, 'b'}}));
     g.selectFirst();
-    g.move(0, 0, 60);
+    g.move(0, 0, 300);
     CHECK(g.peek16("ROUND") == 2);
     CHECK(g.peek16("TURN") == 0);
     CHECK(g.count(true) >= 3);                                  // nothing of theirs died

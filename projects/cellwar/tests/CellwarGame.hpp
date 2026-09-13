@@ -123,8 +123,9 @@ public:
 
     /* Stage the folder device under %TEMP%/<name>, mount it, boot into the
      * game: RT-11's prompts answered, "R CELWAR" run by STARTS.COM, the
-     * board up by the end of `bootFrames`. */
-    explicit CellwarGame(const char *name, int bootFrames = 1500)
+     * title up by the end of `bootFrames` and, unless `title` is asked
+     * for, SPACE pressed so that the board is up. */
+    explicit CellwarGame(const char *name, bool title = false, int bootFrames = 1500)
     {
         syms_ = symbols();
         REQUIRE(syms_.count("BOARD"));
@@ -134,6 +135,10 @@ public:
         REQUIRE(emu.mountDisk(0, (boot_ / "device.rtfs").string()));
         hookConsole();
         settle(bootFrames);
+        if (!title) {
+            tap(ms0515::Key::Space, 60);
+            REQUIRE(peek16("MODE") == 2);
+        }
     }
 
     ms0515_board_t &board() { return ms0515::internal::board(emu); }
@@ -208,6 +213,21 @@ public:
         settle(after);
     }
 
+    /* Run until the program has started: its frame counter, cleared by
+     * HWINIT, is small and ticking (whatever the RAM held before does not
+     * tick).  The title is up then, ten seconds before the demo. */
+    void awaitTitle()
+    {
+        for (int i = 0; i < 1500; ++i) {
+            const uint16_t a = peek16("FRAMES");
+            step();
+            step();
+            const uint16_t b = peek16("FRAMES");
+            if (b < 60 && (b == a + 1 || b == a + 2)) { settle(10); return; }   // the title drawn
+        }
+        FAIL("the game did not start");
+    }
+
     /* After the board is poked: the selection scanned afresh from the
      * board's first cell, the combat units first.  Tab scans on from SEL
      * round the board, so SEL is set to the last cell (a -1 would mean no
@@ -238,6 +258,12 @@ public:
 
     /* The folder device the game runs from: files the game makes land here. */
     const fs::path &bootDir() const { return boot_; }
+
+    /* The pixel byte of a cell's row (0..15), left or right half. */
+    uint8_t pixels(int x, int y, int row, bool right)
+    {
+        return vram()[(y * 16 + row) * 80 + x * 4 + (right ? 2 : 0)];
+    }
 
     const uint8_t *vram() { return board_get_vram(&board()); }
     int vramNonzero()

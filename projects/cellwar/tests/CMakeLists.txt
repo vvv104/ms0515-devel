@@ -12,6 +12,8 @@ find_package(doctest REQUIRED)
 add_executable(cellwar_tests
     test_main.cpp
     test_rules.cpp
+    test_ai.cpp
+    test_title.cpp
 )
 
 target_include_directories(cellwar_tests PRIVATE

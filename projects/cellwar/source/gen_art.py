@@ -1,4 +1,4 @@
-"""gen_art.py - ART.MAC, the game's pictures: the six cell tiles and the font.
+"""gen_art.py - ART.MAC, the game's pictures: the six cell tiles, the font and the title's logo.
 
 The build's pre_build hook.  The art is drawn here as text - a '#' is a
 lit pixel - and written next to the sources as MACRO-11 .BYTE lines
@@ -193,6 +193,61 @@ GLYPHS = {
 
 FIRST, LAST = 32, 90
 
+# The title's logo: the word in the game's own glyphs, four times the
+# size, with a shadow three pixels deep and to the right - the chunky
+# lettering of a Spectrum loading screen - in six bands of bright colour,
+# the Spectrum's rainbow stripe.  Attributes are GRB in bits 2-0 with
+# bright in bit 6, as MS0515.MAC describes them.
+LOGO_TEXT = "CELLWAR"
+LOGO_SCALE = 4
+LOGO_PITCH = 24          # pixels from one letter's start to the next
+LOGO_SHADOW = 3
+LOGO_WORDS = 21          # 7 letters x 24 pixels = 168 = 21 words
+LOGO_ROWS = 32           # 7 rows x 4 + the shadow, padded
+LOGO_BANDS = [0o102, 0o106, 0o104, 0o105, 0o107, 0o103]   # red yellow green cyan white magenta
+
+
+def logo_rows() -> list[list[int]]:
+    """The logo as LOGO_ROWS rows of LOGO_WORDS * 8 pixels (0/1)."""
+    width = LOGO_WORDS * 8
+    grid = [[0] * width for _ in range(LOGO_ROWS)]
+    for i, ch in enumerate(LOGO_TEXT):
+        glyph = GLYPHS[ch]
+        for gy in range(7):
+            for gx in range(5):
+                if glyph[gy][gx] != "#":
+                    continue
+                for shadow in range(LOGO_SHADOW + 1):
+                    for dy in range(LOGO_SCALE):
+                        for dx in range(LOGO_SCALE):
+                            x = i * LOGO_PITCH + gx * LOGO_SCALE + dx + shadow
+                            y = gy * LOGO_SCALE + dy + shadow
+                            if x < width and y < LOGO_ROWS:
+                                grid[y][x] = 1
+    return grid
+
+
+def logo_lines() -> list[str]:
+    out = [
+        "",
+        "; --- the title's logo: a picture for DRAWBM ----------------------------",
+        f"LOGO:   .WORD   {LOGO_WORDS}.,{LOGO_ROWS}.,LOGOPX,LOGOAT",
+        "LOGOPX:",
+    ]
+    for row in logo_rows():
+        text = "".join("#" if p else "." for p in row)
+        bytes_ = [int("".join(str(p) for p in row[i:i + 8]), 2) for i in range(0, len(row), 8)]
+        out.append("        .BYTE   " + ",".join(f"{b:03o}" for b in bytes_))
+        half = len(text) // 2                      # MACRO reads 132 columns of a line
+        out.append("        ; " + text[:half])
+        out.append("        ; " + text[half:])
+    out.append("LOGOAT:")
+    per_band = LOGO_ROWS // len(LOGO_BANDS)
+    attrs = [LOGO_BANDS[min(y // per_band, len(LOGO_BANDS) - 1)] for y in range(LOGO_ROWS)]
+    out.append("        .BYTE   " + ",".join(f"{a:03o}" for a in attrs[:16]))
+    out.append("        .BYTE   " + ",".join(f"{a:03o}" for a in attrs[16:]))
+    return out
+
 
 def byte(row: str) -> int:
     assert len(row) == 8, row
@@ -222,7 +277,7 @@ def main() -> None:
         "        .TITLE  ART",
         "        .SBTTL  CellWar - the tiles and the font",
         "; ART.MAC - drawn by source/gen_art.py; edit the pictures there.",
-        "        .GLOBL  TFOG,TEMPTY,TINF,TFRT1,TFRT2,TFAC,FONT",
+        "        .GLOBL  TFOG,TEMPTY,TINF,TFRT1,TFRT2,TFAC,FONT,LOGO",
         "",
         "; --- the tiles: 16 x 16, two bytes a row, bit 7 leftmost ------------",
     ]
@@ -232,6 +287,7 @@ def main() -> None:
     for code in range(FIRST, LAST + 1):
         ch = chr(code)
         lines += glyph_lines(ch, GLYPHS.get(ch, GLYPHS[" "]))
+    lines += logo_lines()
     lines += ["        .END", ""]
     OUT.write_text("\n".join(lines), encoding="ascii", newline="\r\n")
     print(f"wrote {OUT}")

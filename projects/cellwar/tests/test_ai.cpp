@@ -31,7 +31,7 @@ void humanStands(CellwarGame &g, int units)
 {
     g.selectFirst();
     for (int i = 0; i < units - 1; ++i) g.move(0, 0);
-    g.move(0, 0, 80);
+    g.move(0, 0, 300);
     REQUIRE(g.peek16("ROUND") == 2);
 }
 
@@ -55,7 +55,7 @@ TEST_CASE("cellwar ai: an enemy infantry next door is killed rather than waited 
     g.setBoard(place({{5, 5, 'A'}, {7, 5, 'I'}, {9, 5, 'i'}}));
     g.selectFirst();
     g.move(0, 0);                                               // the fortification stands
-    g.move(1, 0, 80);                                           // the infantry steps next to theirs
+    g.move(1, 0, 300);                                           // the infantry steps next to theirs
     REQUIRE(g.peek16("ROUND") == 2);
     CHECK((g.cell(8, 5) & (Unit | Own)) == (Unit | Own));       // (8,5) taken
     CHECK(g.count(false) == 1);
@@ -129,7 +129,7 @@ TEST_CASE("cellwar: S saves the game to DK:CELWAR.GAM and L brings it back")
     CHECK(g.cell(12, 6) == (Unit | Own | 3));
     CHECK(g.sel() == index(7, 3));
     CHECK(g.peek16("ROUND") == 1);
-    g.move(0, 0, 80);                                           // and it plays on: the last
+    g.move(0, 0, 300);                                           // and it plays on: the last
     CHECK(g.peek16("ROUND") == 2);                              //   unmoved unit stood, the
     CHECK(g.cell(7, 3) == (Unit | 3));                          //   round turned
 }

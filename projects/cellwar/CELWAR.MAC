@@ -39,10 +39,11 @@
 ; (BIC #177400) first.
 ;-----------------------------------------------------------------------
         .MCALL  .EXIT,.LOOKUP,.ENTER,.READW,.WRITW,.CLOSE
-        .GLOBL  HWINIT,HWEXIT,KEY,DRAWC,TEXT,TATTR,CLICK,WAIT,FRAMES
-        .GLOBL  TFOG,TEMPTY,TINF,TFRT1,TFRT2,TFAC
+        .GLOBL  HWINIT,HWEXIT,KEY,KFLUSH,CLRSCR,DRAWC,DRAWBM,TEXT,TATTR
+        .GLOBL  CLICK,SNDHIT,SNDMOV,SNDSTD,SNDNEW,WAIT,FRAMES
+        .GLOBL  TFOG,TEMPTY,TINF,TFRT1,TFRT2,TFAC,LOGO
         .GLOBL  BOARD,VISH,VISC,TURN,PHASE,ROUND,GSTATE,SEL,CDX,CDY
-        .GLOBL  SEED,HCNT,CCNT  ; the state, named in the link map for the tests
+        .GLOBL  SEED,HCNT,CCNT,MODE     ; the state, named in the link map for the tests
 
 ; --- the board ----------------------------------------------------------
 WIDTH  = 20.
@@ -76,21 +77,93 @@ AFLSH  = 200                    ; flash: the cursor
 AHUM   = 4                      ; the human's units: green
 ACPU   = 2                      ; the computer's: red
 ASEL   = 10                     ; the selected unit: on blue paper
+AHIL1  = 70                     ; the computer's unit about to move: white paper
+AHIL2  = 60                     ; where it goes: yellow paper
+AFLS   = 120                    ; a blow landing: bright red paper
 AFOG   = 1                      ; the fog: dim blue
 AEMP   = 7                      ; an empty cell in view: dim white
 ATXT   = 107                    ; the text: bright white
 AHLP   = 7                      ; the help line: dim white
 
-; --- the start ----------------------------------------------------------
+; --- the start: the title, the demo, the game ----------------------------
+; MODE says which is on: 0 the title, 1 the demo, 2 the game.  The title
+; waits ten seconds for SPACE (the game) or Q (RT-11), then the demo
+; plays the computer against itself with the whole board in view until
+; one of those keys; a demo game over brings the title back.
 START:  JSR     PC,XYINIT
         JSR     PC,HWINIT
+TITLE:  CLR     MODE
+        JSR     PC,DRWTTL
+        MOV     #500.,R0
+        JSR     PC,DWAIT
+        MOV     DEMOKY,R0
+        CLR     DEMOKY
+        CMP     R0,#KSPC
+        BNE     1$
+        JMP     GAME
+1$:     CMP     R0,#KQ
+        BNE     DEMO
+        JMP     KQUIT
+DEMO:   MOV     #1,MODE
         JSR     PC,NEWGAM
+        MOV     #MDEMO,MSG
+2$:     JSR     PC,REDRAW
+        CLR     R0
+        JSR     PC,AITURN
+        TST     DEMOKY
+        BNE     4$
+        TST     GSTATE
+        BNE     3$
+        MOV     #COWN,R0
+        JSR     PC,AITURN
+        TST     DEMOKY
+        BNE     4$
+        TST     GSTATE
+        BNE     3$
+        INC     ROUND
+        BR      2$
+3$:     JSR     PC,REDRAW       ; over: a moment, then the title again
+        MOV     #150.,R0
+        JSR     PC,DWAIT
+        TST     DEMOKY
+        BNE     4$
+        JMP     TITLE
+4$:     MOV     DEMOKY,R0
+        CLR     DEMOKY
+        CMP     R0,#KQ
+        BNE     GAME
+        JMP     KQUIT
+GAME:   MOV     #2,MODE
+        JSR     PC,NEWGAM
+        JSR     PC,KFLUSH
         JSR     PC,REDRAW
 MLOOP:  JSR     PC,KEY
         TST     R0
         BEQ     MLOOP
         JSR     PC,ONKEY
         BR      MLOOP
+
+; DWAIT: R0 frames, the keys watched meanwhile.  At the title and in the
+; demo SPACE or Q ends the wait and is left in DEMOKY; in the game the
+; keys pressed while the computer moves are dropped.
+DWAIT:  MOV     R0,DWCNT
+1$:     MOV     #1,R0
+        JSR     PC,WAIT
+        JSR     PC,KEY
+        TST     R0
+        BEQ     2$
+        CMP     MODE,#2
+        BEQ     2$
+        CMP     R0,#KSPC
+        BEQ     3$
+        CMP     R0,#KQ
+        BNE     2$
+3$:     MOV     R0,DEMOKY
+        RTS     PC
+2$:     DEC     DWCNT
+        BNE     1$
+        RTS     PC
+DWCNT:  .WORD   0
 
 ; ONKEY: R0 = a key's code; the handler of a key of ours, or nothing.
 ONKEY:  MOV     #KEYTAB,R1
@@ -173,14 +246,44 @@ KLOADK: JSR     PC,LOAD
 ; --- the human's move -----------------------------------------------------
 DOMOVE: MOV     SEL,R0
         JSR     PC,TARGET
+        JSR     PC,MOVKND
         JSR     PC,APPLY
         BCC     1$
         MOV     #MINVAL,MSG
         JSR     PC,CLICK
         JSR     PC,REDRAW
         RTS     PC
-1$:     JSR     PC,AFTMOV
+1$:     JSR     PC,PLAYK
+        JSR     PC,AFTMOV
         RTS     PC
+
+; MOVKND: R0, R1 = a move about to be applied; MKIND = what it is: 0 a
+; step, 1 a blow, 2 standing, 3 a unit made.  Keeps R0 and R1.
+MOVKND: MOV     #2,MKIND
+        CMP     R0,R1
+        BEQ     9$
+        MOV     #3,MKIND
+        MOVB    BOARD(R0),R2
+        BIC     #^C<CSTG>,R2
+        CMP     R2,#SFACT
+        BEQ     9$
+        MOV     #1,MKIND
+        TSTB    BOARD(R1)
+        BMI     9$
+        CLR     MKIND
+9$:     RTS     PC
+MKIND:  .WORD   0
+
+; PLAYK: the sound of the move MKIND names.  Keeps R0 and R1.
+PLAYK:  MOV     R0,-(SP)
+        MOV     R1,-(SP)
+        MOV     MKIND,R0
+        ASL     R0
+        JSR     PC,@SNDTAB(R0)
+        MOV     (SP)+,R1
+        MOV     (SP)+,R0
+        RTS     PC
+SNDTAB: .WORD   SNDMOV,SNDHIT,SNDSTD,SNDNEW
 
 ; TARGET: R1 = the cursor's cell, SEL + dy * 24 + dx.  Keeps R0.
 TARGET: MOV     CDY,R1
@@ -425,55 +528,130 @@ WINCHK: CLR     HCNT
 5$:     RTS     PC
 
 ; --- the computer's turn -------------------------------------------------
-; CPUTRN: every unit of the computer's moves, each as AIMOVE chooses,
-; the ones in the human's view shown as they go; then the round is over
-; and the human's turn begins.
+; CPUTRN: the computer plays its side; then the round is over and the
+; human's turn begins, the keys pressed meanwhile forgotten.
 CPUTRN: MOV     #MCPU,MSG
         JSR     PC,REDRAW
         MOV     #COWN,R0
+        JSR     PC,AITURN
+        TST     GSTATE
+        BNE     1$
+        INC     ROUND
+        CLR     R0
         JSR     PC,BEGTRN
-1$:     TST     SEL
-        BMI     3$
+        MOV     #MYOUR,MSG
+        JSR     PC,KFLUSH
+1$:     RTS     PC
+
+; AITURN: R0 = a side (0 or COWN); the computer moves every unit of it,
+; each as AIMOVE chooses, shown as it goes (PREMOV, POSTMV).  In the demo
+; a key that ends it (DEMOKY) ends the turn too.
+AITURN: MOV     R0,AIOWN
+        CLR     AIMIDX
+        TST     R0
+        BEQ     1$
+        MOV     #2,AIMIDX
+1$:     JSR     PC,BEGTRN
+2$:     TST     SEL
+        BMI     9$
         MOV     SEL,R0
         JSR     PC,AIMOVE       ; R1 = the cell it chooses
         MOV     SEL,R0
+        JSR     PC,PREMOV
+        JSR     PC,MOVKND
         JSR     PC,APPLY
-        BCC     2$
+        BCC     3$
         MOV     SEL,R0          ; a choice the rules refuse: it stands
         MOV     R0,R1
+        JSR     PC,MOVKND
         JSR     PC,APPLY
-2$:     JSR     PC,VISADD       ; both cells into its view (VISADD keeps
+3$:     JSR     PC,VISADD       ; both cells into its view (VISADD keeps
         MOV     R0,-(SP)        ;   every register)
         MOV     R1,R0
         JSR     PC,VISADD
         MOV     (SP)+,R0
-        JSR     PC,SHOWMV
+        JSR     PC,POSTMV
         JSR     PC,WINCHK
         TST     GSTATE
+        BNE     9$
+        CMP     MODE,#1
         BNE     4$
-        JSR     PC,NEXTSL
-        BR      1$
-3$:     INC     ROUND
-        CLR     R0
-        JSR     PC,BEGTRN
-        MOV     #MYOUR,MSG
-4$:     RTS     PC
+        TST     DEMOKY
+        BNE     9$
+4$:     JSR     PC,NEXTSL
+        BR      2$
+9$:     RTS     PC
 
-; SHOWMV: R0, R1 = the two cells of a move; when the human sees either,
-; the board is shown and a moment passes.
-SHOWMV: TSTB    VISH(R0)
+; PREMOV: R0, R1 = the two cells of the computer's move, about to be
+; made.  When the human sees either (in the demo, always) the unit is
+; shown on white for a moment, then the cell it goes to on yellow.
+; Keeps R0 and R1; PMSEEN says whether it was shown.
+PREMOV: MOV     R0,PMSRC
+        MOV     R1,PMDST
+        CLR     PMSEEN
+        CMP     MODE,#2
+        BNE     1$
+        TSTB    VISH(R0)
         BNE     1$
         TSTB    VISH(R1)
-        BEQ     2$
-1$:     JSR     PC,REDRAW
+        BEQ     9$
+1$:     MOV     #1,PMSEEN
+        MOV     PMSRC,HILITE
+        JSR     PC,REDRAW
         MOV     #8.,R0
-        JSR     PC,WAIT
-2$:     RTS     PC
+        JSR     PC,DWAIT
+        CMP     PMSRC,PMDST
+        BEQ     9$
+        MOV     PMDST,HILIT2
+        JSR     PC,REDRAW
+        MOV     #8.,R0
+        JSR     PC,DWAIT
+9$:     MOV     PMSRC,R0
+        MOV     PMDST,R1
+        RTS     PC
+
+; POSTMV: the move made - its sound, and a blow flashes the cell it
+; landed on.  Keeps R0 and R1.
+POSTMV: MOV     R0,-(SP)
+        MOV     R1,-(SP)
+        MOV     #-1,HILITE
+        MOV     #-1,HILIT2
+        TST     PMSEEN
+        BEQ     9$
+        JSR     PC,REDRAW
+        JSR     PC,PLAYK
+        CMP     MKIND,#1
+        BNE     8$
+        MOV     #2,R1
+1$:     MOV     R1,-(SP)
+        MOV     PMDST,FLASHC
+        JSR     PC,REDRAW
+        MOV     #3,R0
+        JSR     PC,DWAIT
+        MOV     #-1,FLASHC
+        JSR     PC,REDRAW
+        MOV     #3,R0
+        JSR     PC,DWAIT
+        MOV     (SP)+,R1
+        SOB     R1,1$
+8$:     MOV     #6,R0
+        JSR     PC,DWAIT
+9$:     MOV     (SP)+,R1
+        MOV     (SP)+,R0
+        RTS     PC
+PMSRC:  .WORD   0
+PMDST:  .WORD   0
+PMSEEN: .WORD   0
+HILITE: .WORD   -1              ; the cells shown on white, yellow, red
+HILIT2: .WORD   -1
+FLASHC: .WORD   -1
 
 
 ; --- the computer's play ----------------------------------------------------
-; The computer sees what its units see (VISC) and nothing else, and
-; chooses for each unit in turn the step that scores best of the nine.
+; The computer sees what its units see (the view of the side it plays,
+; VISP) and nothing else, and chooses for each unit in turn the step that
+; scores best of the nine.  AIOWN is the side it plays (0 or COWN: in
+; the demo it plays both), AIMIDX that side's word in AIMEM and HOMES.
 ; The scores, in decimal:
 SKFAC  = 120.                   ; killing a factory
 SKINF  = 80.                    ; killing an infantry
@@ -712,16 +890,15 @@ APPRCH: MOV     AIC,R0
 ; GOAL: AIG = the nearest enemy in view of AIC, remembered in AIMEM; or
 ; the one last seen; or the human's corner of the board.  AIGK = 1 when
 ; an enemy is in view.
-GOAL:   MOV     #HOME,AIG
+GOAL:   MOV     AIMIDX,R2
+        MOV     HOMES(R2),AIG
         CLR     AIGK
         MOV     #-1,R4          ; R4 = the nearest so far, R5 = its distance
         MOV     #100.,R5
         CLR     R3
-1$:     MOVB    BOARD(R3),R0
-        BPL     2$
-        BIT     #COWN,R0
-        BNE     2$
-        TSTB    VISC(R3)
+1$:     MOV     R3,R0
+        JSR     PC,ENEMY
+        TST     R0
         BEQ     2$
         MOV     AIC,R0
         MOV     R3,R1
@@ -733,26 +910,44 @@ GOAL:   MOV     #HOME,AIG
 2$:     INC     R3
         CMP     R3,#NCELLS
         BLO     1$
+        MOV     AIMIDX,R2
         TST     R4
         BMI     3$
         MOV     R4,AIG
-        MOV     R4,AIMEM
+        MOV     R4,AIMEM(R2)
         MOV     #1,AIGK
         RTS     PC
-3$:     TST     AIMEM
+3$:     TST     AIMEM(R2)
         BMI     4$
-        MOV     AIMEM,AIG
+        MOV     AIMEM(R2),AIG
 4$:     RTS     PC
-HOME   = CELL0+<4*PW>+4
+HOMES:  .WORD   CELL0+<5*PW>+15.,CELL0+<4*PW>+4   ; the other side's start
+
+; ENEMY: R0 = a cell; R0 = 1 when an enemy unit in view stands there.
+; Keeps R1.
+ENEMY:  MOV     R2,-(SP)
+        MOV     VISP,R2
+        ADD     R0,R2
+        TSTB    (R2)
+        BEQ     9$
+        MOVB    BOARD(R0),R2
+        BPL     9$
+        BIC     #^C<COWN>,R2
+        CMP     R2,AIOWN
+        BEQ     9$
+        MOV     #1,R0
+        MOV     (SP)+,R2
+        RTS     PC
+9$:     CLR     R0
+        MOV     (SP)+,R2
+        RTS     PC
 
 ; SEENNR: R0 = a cell; R0 = 1 when an enemy in view is within SNEAR of it.
 SEENNR: MOV     R0,R4
         CLR     R3
-1$:     MOVB    BOARD(R3),R0
-        BPL     2$
-        BIT     #COWN,R0
-        BNE     2$
-        TSTB    VISC(R3)
+1$:     MOV     R3,R0
+        JSR     PC,ENEMY
+        TST     R0
         BEQ     2$
         MOV     R4,R0
         MOV     R3,R1
@@ -810,12 +1005,11 @@ NBSUM:  .WORD   0
 NBI:    .WORD   0
 
 ; PENEMY: an enemy combat unit in view.
-PENEMY: TSTB    VISC(R0)
+PENEMY: MOV     R0,R1
+        JSR     PC,ENEMY
+        TST     R0
         BEQ     9$
-        MOVB    BOARD(R0),R1
-        BPL     9$
-        BIT     #COWN,R1
-        BNE     9$
+        MOVB    BOARD(R1),R1
         BIC     #^C<CSTG>,R1
         CMP     R1,#SFACT
         BEQ     9$
@@ -825,12 +1019,11 @@ PENEMY: TSTB    VISC(R0)
         RTS     PC
 
 ; PEFAC: an enemy factory in view.
-PEFAC:  TSTB    VISC(R0)
+PEFAC:  MOV     R0,R1
+        JSR     PC,ENEMY
+        TST     R0
         BEQ     9$
-        MOVB    BOARD(R0),R1
-        BPL     9$
-        BIT     #COWN,R1
-        BNE     9$
+        MOVB    BOARD(R1),R1
         BIC     #^C<CSTG>,R1
         CMP     R1,#SFACT
         BNE     9$
@@ -839,11 +1032,24 @@ PEFAC:  TSTB    VISC(R0)
 9$:     CLR     R0
         RTS     PC
 
-; POWNF: a factory of the computer's.
-POWNF:  MOVB    BOARD(R0),R1
+; OWNU: R0 = a cell; R0 = 1 when a unit of the side the computer plays
+; stands there.  Keeps R1.
+OWNU:   MOVB    BOARD(R0),R2
         BPL     9$
-        BIT     #COWN,R1
+        BIC     #^C<COWN>,R2
+        CMP     R2,AIOWN
+        BNE     9$
+        MOV     #1,R0
+        RTS     PC
+9$:     CLR     R0
+        RTS     PC
+
+; POWNF: a factory of the side's own.
+POWNF:  MOV     R0,R1
+        JSR     PC,OWNU
+        TST     R0
         BEQ     9$
+        MOVB    BOARD(R1),R1
         BIC     #^C<CSTG>,R1
         CMP     R1,#SFACT
         BNE     9$
@@ -852,14 +1058,15 @@ POWNF:  MOVB    BOARD(R0),R1
 9$:     CLR     R0
         RTS     PC
 
-; PPART: a combat unit of the computer's with its move still to make,
+; PPART: a combat unit of the side's own with its move still to make,
 ; other than the one at PSELF.
 PPART:  CMP     R0,PSELF
         BEQ     9$
-        MOVB    BOARD(R0),R1
-        BPL     9$
-        BIT     #COWN,R1
+        MOV     R0,R1
+        JSR     PC,OWNU
+        TST     R0
         BEQ     9$
+        MOVB    BOARD(R1),R1
         BIT     #CMOVD,R1
         BNE     9$
         BIC     #^C<CSTG>,R1
@@ -871,6 +1078,8 @@ PPART:  CMP     R0,PSELF
         RTS     PC
 PSELF:  .WORD   0
 
+AIOWN:  .WORD   0               ; the side the computer plays
+AIMIDX: .WORD   0               ;   and its word in AIMEM and HOMES
 AIC:    .WORD   0               ; the unit's cell
 AIS:    .WORD   0               ; its stage
 AIT:    .WORD   0               ; the step under consideration
@@ -918,7 +1127,11 @@ NEWGAM: MOV     #BOARD,R1       ; the frame all round
         MOV     #1,ROUND
         CLR     GSTATE
         MOV     FRAMES,SEED
-        MOV     #-1,AIMEM       ; the computer has seen nothing yet
+        MOV     #-1,AIMEM       ; neither side has seen anything yet
+        MOV     #-1,AIMEM+2
+        MOV     #-1,HILITE
+        MOV     #-1,HILIT2
+        MOV     #-1,FLASHC
         MOV     #MYOUR,MSG
         JSR     PC,WINCHK
         CLR     R0
@@ -948,7 +1161,8 @@ REDRAW: MOV     #-1,CURIDX      ; the cursor's cell, for DRAWCL
 
 ; DRAWCL: the cell at column R0, row R1 - the fog, an empty cell, or a
 ; unit in its owner's colour, bright while it has a move to make; the
-; selected unit on blue, the cursor's cell flashing.
+; grid closed on the right and below where the view ends; the selected
+; unit on blue, the highlights, the cursor's cell flashing.
 DRAWCL: MOV     R0,-(SP)
         MOV     R1,-(SP)
         MOV     R1,R2           ; R2 = CELL0 + y * 24 + x
@@ -962,12 +1176,14 @@ DRAWCL: MOV     R0,-(SP)
         ADD     #CELL0,R2
         MOV     #TFOG,TILE
         MOVB    #AFOG,TATTR
-        TSTB    VISH(R2)
-        BEQ     8$
+        MOV     R2,R0
+        JSR     PC,SHOWN
+        TST     R0
+        BEQ     7$
         MOV     #TEMPTY,TILE
         MOVB    #AEMP,TATTR
         MOVB    BOARD(R2),R1
-        BPL     7$
+        BPL     3$
         MOV     R1,R0
         BIC     #^C<CSTG>,R0
         ASL     R0
@@ -980,13 +1196,24 @@ DRAWCL: MOV     R0,-(SP)
         BNE     5$
         BIS     #ABRT,R0
 5$:     MOVB    R0,TATTR
-7$:     CMP     R2,SEL
-        BNE     6$
-        BISB    #ASEL,TATTR
-6$:     CMP     R2,CURIDX
-        BNE     8$
-        BISB    #AFLSH,TATTR
-8$:     MOV     (SP)+,R1
+3$:     CLR     R1              ; the grid closed where the view ends
+        MOV     R2,R0
+        INC     R0
+        JSR     PC,SHOWN
+        TST     R0
+        BNE     31$
+        BIS     #1,R1
+31$:    MOV     R2,R0
+        ADD     #PW,R0
+        JSR     PC,SHOWN
+        TST     R0
+        BNE     32$
+        BIS     #2,R1
+32$:    MOV     TILE,R0
+        JSR     PC,TILEDG
+        MOV     R0,TILE
+7$:     JSR     PC,PAPERS
+        MOV     (SP)+,R1
         MOV     (SP)+,R0
         MOV     TILE,R2
         JSR     PC,DRAWC
@@ -994,6 +1221,154 @@ DRAWCL: MOV     R0,-(SP)
 TILES:  .WORD   TINF,TFRT1,TFRT2,TFAC
 TILE:   .WORD   0
 CURIDX: .WORD   0
+
+; SHOWN: R0 = a cell; R0 = 1 when it is drawn as seen: in the game, in
+; the human's view; at the title and in the demo, on the map.  Keeps R1
+; and R2.
+SHOWN:  CMP     MODE,#2
+        BNE     1$
+        TSTB    VISH(R0)
+        BEQ     2$
+        MOV     #1,R0
+        RTS     PC
+1$:     CMPB    BOARD(R0),#CEDGE
+        BEQ     2$
+        MOV     #1,R0
+        RTS     PC
+2$:     CLR     R0
+        RTS     PC
+
+; PAPERS: R2 = a cell; TATTR gets the paper of the selection, of the
+; highlights of the computer's move, and the cursor's flash.
+PAPERS: CMP     R2,SEL
+        BNE     1$
+        BISB    #ASEL,TATTR
+1$:     CMP     R2,HILITE
+        BNE     2$
+        BICB    #70,TATTR
+        BISB    #AHIL1,TATTR
+2$:     CMP     R2,HILIT2
+        BNE     3$
+        BICB    #70,TATTR
+        BISB    #AHIL2,TATTR
+3$:     CMP     R2,FLASHC
+        BNE     4$
+        BICB    #70,TATTR
+        BISB    #AFLS,TATTR
+4$:     CMP     R2,CURIDX
+        BNE     5$
+        BISB    #AFLSH,TATTR
+5$:     RTS     PC
+
+; TILEDG: R0 = a tile, R1 = the edges to close: 1 the right, 2 the
+; bottom.  R0 = the tile with them drawn (a copy in TBUF), or itself.
+TILEDG: TST     R1
+        BEQ     9$
+        MOV     R2,-(SP)
+        MOV     R3,-(SP)
+        MOV     #TBUF,R2
+        MOV     #32.,R3
+1$:     MOVB    (R0)+,(R2)+
+        SOB     R3,1$
+        BIT     #1,R1
+        BEQ     2$
+        MOV     #TBUF+1,R2      ; the right column: bit 0 of every right byte
+        MOV     #16.,R3
+3$:     BISB    #1,(R2)
+        ADD     #2,R2
+        SOB     R3,3$
+2$:     BIT     #2,R1
+        BEQ     4$
+        MOV     #-1,TBUF+30.    ; the bottom row
+4$:     MOV     #TBUF,R0
+        MOV     (SP)+,R3
+        MOV     (SP)+,R2
+9$:     RTS     PC
+TBUF:   .BLKW   16.
+
+; --- the title -------------------------------------------------------------
+; The logo in the Spectrum's rainbow, a line under it, a field of the
+; two armies drawn from the game's own tiles, the keys, the machine.
+DRWTTL: JSR     PC,CLRSCR
+        MOV     #9.,R0
+        MOV     #12.,R1
+        MOV     #LOGO,R2
+        JSR     PC,DRAWBM
+        MOVB    #ATXT,TATTR
+        MOV     #13.,R0
+        MOV     #56.,R1
+        MOV     #TSUB,R2
+        JSR     PC,TEXT
+        MOV     #7,R0
+        MOV     #152.,R1
+        MOV     #TKEYS,R2
+        JSR     PC,TEXT
+        MOVB    #AHLP,TATTR
+        MOV     #6,R0
+        MOV     #184.,R1
+        MOV     #TMACH,R2
+        JSR     PC,TEXT
+        MOV     #-1,SEL         ; no selection, no cursor, no highlights
+        MOV     #-1,CURIDX
+        MOV     #-1,HILITE
+        MOV     #-1,HILIT2
+        MOV     #-1,FLASHC
+        CLR     R5              ; the field: four rows of twenty cells
+1$:     CLR     R4
+2$:     MOV     R5,R0           ; the letter at TTLMAP + y * 20 + x
+        ASL     R0
+        ASL     R0
+        MOV     R0,R1
+        ASL     R0
+        ASL     R0
+        ADD     R1,R0
+        ADD     R4,R0
+        MOVB    TTLMAP(R0),R0
+        JSR     PC,TTLCEL
+        CLR     R1              ; the grid closed at the field's edge
+        CMP     R4,#WIDTH-1
+        BNE     3$
+        BIS     #1,R1
+3$:     CMP     R5,#3
+        BNE     4$
+        BIS     #2,R1
+4$:     MOV     TILE,R0
+        JSR     PC,TILEDG
+        MOV     R0,R2
+        MOV     R4,R0
+        MOV     R5,R1
+        ADD     #5,R1
+        JSR     PC,DRAWC
+        INC     R4
+        CMP     R4,#WIDTH
+        BLO     2$
+        INC     R5
+        CMP     R5,#4
+        BLO     1$
+        RTS     PC
+
+; TTLCEL: R0 = a letter of TTLMAP; TILE and TATTR for it - the human's
+; I A B F, the computer's 1 2 3 4, anything else an empty cell.
+TTLCEL: MOV     #TTLTAB,R1
+1$:     CMP     (R1),R0
+        BEQ     2$
+        ADD     #6,R1
+        TST     (R1)
+        BNE     1$
+2$:     MOV     2(R1),TILE
+        MOVB    4(R1),TATTR
+        RTS     PC
+TTLTAB: .WORD   'I,TINF,AHUM+ABRT, 'A,TFRT1,AHUM+ABRT, 'B,TFRT2,AHUM+ABRT, 'F,TFAC,AHUM+ABRT
+        .WORD   '1,TINF,ACPU+ABRT, '2,TFRT1,ACPU+ABRT, '3,TFRT2,ACPU+ABRT, '4,TFAC,ACPU+ABRT
+        .WORD   0,TEMPTY,AEMP
+TTLMAP: .ASCII  /..I.A.B.F..4.3.2.1../
+        .ASCII  /.I.I..A.F..4.2..1.1./
+        .ASCII  /..I.A.B.F..4.3.2.1../
+        .ASCII  /.I.I..A.F..4.2..1.1./
+TSUB:   .ASCIZ  /A WAR OF CELLS/
+TKEYS:  .ASCIZ  /SPACE TO PLAY   Q TO LEAVE/
+TMACH:  .ASCIZ  /FOR THE ELEKTRONIKA MS-0515/
+        .EVEN
 
 ; STATUS: the round and the counts, the message, the keys.
 STATUS: MOV     ROUND,R0
@@ -1054,8 +1429,11 @@ MSAVED: .ASCIZ  /GAME SAVED/
 MLOADD: .ASCIZ  /GAME LOADED/
 MNOSAV: .ASCIZ  /NO SAVED GAME/
 MSVERR: .ASCIZ  /CANNOT SAVE/
+MDEMO:  .ASCIZ  /DEMO: SPACE TO PLAY, Q TO LEAVE/
         .EVEN
 MSG:    .WORD   MYOUR
+MODE:   .WORD   0               ; 0 the title, 1 the demo, 2 the game
+DEMOKY: .WORD   0               ; SPACE or Q pressed at the title or in the demo
 VISP:   .WORD   VISH            ; the view of the player whose turn it is
 
 ; --- saving and loading -----------------------------------------------------
@@ -1109,7 +1487,7 @@ CDY:    .WORD   0
 SEED:   .WORD   0
 HCNT:   .WORD   0
 CCNT:   .WORD   0
-AIMEM:  .WORD   0               ; the enemy the computer saw last, -1 none
+AIMEM:  .BLKW   2               ; the enemy each side saw last, -1 none
 SAVEND:
 SAVLEN = <SAVEND-SAVBEG>/2
 SAVBLK = 3
