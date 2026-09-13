@@ -1,0 +1,230 @@
+        .TITLE  MS0515
+        .SBTTL  The MS-0515 under CELLWAR
+;-----------------------------------------------------------------------
+; MS0515.MAC - everything CELLWAR asks of the machine it runs on.
+;
+; The game in CELLWAR.MAC knows a screen of 20 x 10 cells with five
+; lines of text under them, a keyboard that sends a code per key, a
+; click and a frame clock.  This file gives it those on the Elektronika
+; MS-0515; to run the game on another PDP-11 rewrite this file and leave
+; CELLWAR.MAC alone.  The tiles and the font come from ART.MAC.
+;
+; The interface - every routine keeps R3, R4 and R5 and may use R0-R2:
+;
+;   HWINIT  take the machine: the colour screen mode cleared, a black
+;           border, the keyboard's and the frame interrupt's vectors.
+;           Once, at the start.
+;   HWEXIT  give it back the way HWINIT found it.  Once, before .EXIT.
+;   KEY     R0 = the next key's code, 0 when none is waiting.  A code is
+;           the MS7004's: it comes when the key goes down and again while
+;           it is held; nothing comes when it goes up.
+;   DRAWC   draw a cell: R0 = its column (0..19), R1 = its row (0..9),
+;           R2 = the tile (16 rows of two bytes, bit 7 leftmost), TATTR =
+;           the attribute byte: bit 7 flash, bit 6 bright, bits 5-3 the
+;           paper, bits 2-0 the ink, each colour G R B.
+;   TEXT    print: R0 = the column (0..39, 8 pixels each), R1 = the pixel
+;           row (0..199), R2 = an .ASCIZ string of ' '..'Z', TATTR as
+;           above.
+;   CLICK   a short click from the speaker: a move refused.
+;   WAIT    R0 frames of the 50 Hz screen.
+;   FRAMES  the frame counter, for the tests and for a random seed.
+;-----------------------------------------------------------------------
+        .GLOBL  HWINIT,HWEXIT,KEY,DRAWC,TEXT,TATTR,CLICK,WAIT,FRAMES
+        .GLOBL  FONT
+        .GLOBL  DSSAVE          ; for the tests
+
+; --- the machine ------------------------------------------------------
+SYSC   = 177604         ; system register C: 0-2 border (GRB), 3 = 640x200,
+                        ;   5-6 the speaker line, 7 the timer gate
+DISPAT = 177400         ; memory dispatcher: 0-6 banks primary, 7 VRAM window
+                        ;   on, 9 timer interrupt on, 10-11 the window's place
+DSPOFF = 3177           ; ours: banks primary, window at 040000 (off), the
+                        ;   frame interrupt on
+DSPON  = 7377           ; ours with the VRAM window on, at 100000..137777
+VRAM   = 100000         ; the window: 40 words a row, 200 rows
+LSTRID = 80.            ; bytes between VRAM rows
+CELLH  = 16.            ; a cell is 16 rows of 2 words
+KBDATA = 177440         ; the keyboard USART's received byte
+KBVEC  = 130            ; its interrupt vector
+FRVEC  = 100            ; the frame interrupt's vector, 50 Hz
+SPKBIT = 100            ; the speaker line in register C
+
+; --- HWINIT / HWEXIT --------------------------------------------------
+; Register C is write-only, so a shadow of it, RCSHAD, is kept.
+HWINIT: MOV     @#KBVEC,KBSAVE  ; the keyboard's interrupt vector is ours while
+        MOV     @#KBVEC+2,KBSAVE+2      ;   the game runs: RT-11's handler would
+        MOV     #KBISR,@#KBVEC  ;   take the bytes otherwise
+        MOV     #340,@#KBVEC+2
+        CLR     KBHEAD
+        CLR     KBTAIL
+        MOV     @#FRVEC,FRSAVE  ; the frame interrupt counts for us
+        MOV     @#FRVEC+2,FRSAVE+2
+        MOV     #FRISR,@#FRVEC
+        MOV     #340,@#FRVEC+2
+        CLR     FRAMES
+        MOV     @#DISPAT,DSSAVE ; the dispatcher as RT-11 had it (it reads back)
+        MOV     #DSPOFF,@#DISPAT        ; and the frame interrupt is on from here
+        MOVB    #40,RCSHAD      ; 320x200 colour, black border, speaker low
+        MOVB    RCSHAD,@#SYSC
+        JSR     PC,CLRVRM       ; the screen black: the console's text was there
+        RTS     PC
+
+HWEXIT: JSR     PC,CLRVRM       ; the console finds a clean screen
+        MOVB    #10,@#SYSC      ; the console's 640x200 mode, black border, quiet
+        MOV     KBSAVE,@#KBVEC  ; the keyboard back to RT-11
+        MOV     KBSAVE+2,@#KBVEC+2
+        MOV     DSSAVE,@#DISPAT ; the dispatcher as found, and the frame
+        MOV     FRSAVE,@#FRVEC  ;   interrupt's vector back
+        MOV     FRSAVE+2,@#FRVEC+2
+        RTS     PC
+
+CLRVRM: MFPS    -(SP)
+        MTPS    #340
+        MOV     #DSPON,@#DISPAT
+        MOV     #VRAM,R0
+        MOV     #8000.,R1
+1$:     CLR     (R0)+
+        SOB     R1,1$
+        MOV     #DSPOFF,@#DISPAT
+        MTPS    (SP)+
+        RTS     PC
+
+; --- the keyboard -----------------------------------------------------
+; The keyboard's bytes arrive by interrupt: KBISR queues them in a ring
+; of sixteen, KEY takes them out one at a time.
+KBISR:  MOV     R0,-(SP)
+        MOV     KBHEAD,R0
+        MOVB    @#KBDATA,KBRING(R0)
+        INC     R0
+        BIC     #^C17,R0
+        MOV     R0,KBHEAD
+        MOV     (SP)+,R0
+        RTI
+
+KEY:    MOV     KBTAIL,R1
+        CMP     R1,KBHEAD
+        BEQ     1$
+        MOVB    KBRING(R1),R0
+        BIC     #177400,R0
+        INC     R1
+        BIC     #^C17,R1
+        MOV     R1,KBTAIL
+        RTS     PC
+1$:     CLR     R0
+        RTS     PC
+
+KBRING: .BLKB   16.
+KBHEAD: .WORD   0
+KBTAIL: .WORD   0
+KBSAVE: .BLKW   2
+
+; --- DRAWC: a cell onto the screen ------------------------------------
+; A VRAM word is the attribute byte over eight pixels, so a tile row of
+; two bytes goes over as two words.  The window is open for the copy
+; only; the interrupts are served below it.
+DRAWC:  MOV     R3,-(SP)
+        MOV     R4,-(SP)
+        SWAB    R1              ; the row's first VRAM byte: y * 16 * 80 =
+        MOV     R1,R3           ;   y * 1280 = y * 1024 + y * 256
+        ASL     R1
+        ASL     R1
+        ADD     R3,R1
+        ASL     R0              ; plus x * 4
+        ASL     R0
+        ADD     R0,R1
+        ADD     #VRAM,R1
+        MOVB    TATTR,R3        ; the attribute in the high byte
+        SWAB    R3
+        BIC     #377,R3
+        MOV     #DSPON,@#DISPAT
+        MOV     #CELLH,R4
+1$:     MOV     R3,R0
+        BISB    (R2)+,R0
+        MOV     R0,(R1)+
+        MOV     R3,R0
+        BISB    (R2)+,R0
+        MOV     R0,(R1)+
+        ADD     #LSTRID-4,R1
+        SOB     R4,1$
+        MOV     #DSPOFF,@#DISPAT
+        MOV     (SP)+,R4
+        MOV     (SP)+,R3
+        RTS     PC
+
+; --- TEXT: a string onto the screen -----------------------------------
+; A glyph is 8 bytes of FONT at (character - 32) * 8; it goes over as 8
+; words down one column of the screen.
+TEXT:   MOV     R3,-(SP)
+        MOV     R4,-(SP)
+        MOV     R5,-(SP)
+        ASL     R1              ; the first VRAM byte: row * 80 = row * 64 +
+        ASL     R1              ;   row * 16
+        ASL     R1
+        ASL     R1
+        MOV     R1,R3
+        ASL     R1
+        ASL     R1
+        ADD     R3,R1
+        ASL     R0              ; plus the column's word
+        ADD     R0,R1
+        ADD     #VRAM,R1
+        MOVB    TATTR,R3
+        SWAB    R3
+        BIC     #377,R3
+        MOV     #DSPON,@#DISPAT
+1$:     MOVB    (R2)+,R0
+        BEQ     9$
+        SUB     #40,R0
+        ASL     R0
+        ASL     R0
+        ASL     R0
+        ADD     #FONT,R0        ; R0 = the glyph
+        MOV     R1,R4           ; R4 = down the column
+        MOV     #8.,R5
+2$:     MOV     R3,(R4)
+        BISB    (R0)+,(R4)
+        ADD     #LSTRID,R4
+        SOB     R5,2$
+        TST     (R1)+           ; the next column
+        BR      1$
+9$:     MOV     #DSPOFF,@#DISPAT
+        MOV     (SP)+,R5
+        MOV     (SP)+,R4
+        MOV     (SP)+,R3
+        RTS     PC
+
+TATTR:  .BYTE   7
+RCSHAD: .BYTE   0
+
+; --- CLICK: the speaker -----------------------------------------------
+; The speaker is register C bit 6 (the timer gate, bit 7, stays off so
+; the line is the program's): toggled forty times, 400 turns apart.
+CLICK:  MOV     #40.,R2
+1$:     MOVB    RCSHAD,R1
+        BIC     #177400,R1
+        MOV     #SPKBIT,R0
+        XOR     R0,R1
+        MOVB    R1,RCSHAD
+        MOVB    R1,@#SYSC
+        MOV     #400.,R0
+2$:     SOB     R0,2$
+        SOB     R2,1$
+        BICB    #SPKBIT,RCSHAD  ; the line low
+        MOVB    RCSHAD,@#SYSC
+        RTS     PC
+
+; --- WAIT / FRISR: the clock ------------------------------------------
+; FRISR counts the frames, 50 a second.  (RT-11 has no clock of its own
+; on this machine: the disk handler takes the vector while it waits, and
+; gives it back.)
+FRISR:  INC     FRAMES
+        RTI
+WAIT:   ADD     FRAMES,R0       ; the frame to wait for; the difference is
+1$:     MOV     FRAMES,R1       ;   signed, so the counter may wrap meanwhile
+        SUB     R0,R1
+        BMI     1$
+        RTS     PC
+FRAMES: .WORD   0
+FRSAVE: .BLKW   2
+DSSAVE: .WORD   0
+        .END

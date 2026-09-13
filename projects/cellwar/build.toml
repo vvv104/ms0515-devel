@@ -1,0 +1,10 @@
+[project]
+name      = "CELWAR"
+language  = "macro11"
+pre_build = "source/gen_art.py"          # ART.MAC: the tiles and the font
+sources   = ["CELWAR.MAC", "MS0515.MAC", "ART.MAC"]
+outputs   = ["CELWAR.SAV", "CELWAR.MAP"]   # the map names the state for the tests
+
+[build]
+commands  = ["MACRO CELWAR", "MACRO MS0515", "MACRO ART",
+             "LINK/MAP:CELWAR CELWAR,MS0515,ART"]

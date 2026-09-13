@@ -1,0 +1,688 @@
+        .TITLE  CELWAR
+        .SBTTL  CellWar - the game
+;-----------------------------------------------------------------------
+; CELWAR.MAC - CellWar on a PDP-11 under RT-11: a war of cells on a board
+; of 20 x 10, the human against the machine, in the fog.
+;
+; The rules.  Every unit makes exactly one move a round, given as a
+; step (dx, dy) of -1..1 each; what the step does depends on the unit's
+; stage.  A unit has four stages, one counter that standing raises and
+; moving spends: the infantry, fortification 1, fortification 2, the
+; factory.  Standing (0,0) raises the stage by one; a factory that
+; stands stays a factory.  A combat unit (the first three stages) that
+; steps becomes an infantry and goes: onto an empty cell it moves; onto
+; an enemy infantry or factory it kills it and takes the cell; onto an
+; enemy fortification it dies and the fortification becomes an infantry
+; (a second attacker the same round kills that); onto its own unit, or
+; off the map, it cannot go.  A factory that steps onto an empty cell
+; makes a new infantry there and drops to fortification 1; it cannot
+; step anywhere else.  A unit made this round has moved already.  A
+; player moves all their combat units first, then their factories.  A
+; player sees the cells within 1 of each of their units, within 2 of a
+; fortification; what a unit saw at the start of the turn stays in view
+; until the turn ends.  The last player with a unit wins.
+;
+; Nothing of the machine is here.  The screen, the keys, the click and
+; the clock are the routines of MS0515.MAC, described at its top; the
+; tiles and the font are ART.MAC's (source/gen_art.py draws them).
+;
+; The board is BOARD: 20 x 10 cells inside a frame two cells wide, row
+; major, a byte a cell (the frame is CEDGE; the harness under tests/
+; reads and writes it as laid out here).  A cell is 0 when empty, or
+; CUNIT with the owner (COWN: the computer's), CMOVD (moved this round)
+; and the stage in bits 0-1.  VISH and VISC are the two players' views,
+; a byte a cell, 1 when in view this turn.
+;
+; Registers: R0-R2 carry arguments and results; a routine may use any
+; register unless it says otherwise (the machine's keep R3-R5).  MOVB
+; sign-extends into a register, so a byte used as a number is masked
+; (BIC #177400) first.
+;-----------------------------------------------------------------------
+        .MCALL  .EXIT,.LOOKUP,.ENTER,.READW,.WRITW,.CLOSE
+        .GLOBL  HWINIT,HWEXIT,KEY,DRAWC,TEXT,TATTR,CLICK,WAIT,FRAMES
+        .GLOBL  TFOG,TEMPTY,TINF,TFRT1,TFRT2,TFAC
+        .GLOBL  BOARD,VISH,VISC,TURN,PHASE,ROUND,GSTATE,SEL,CDX,CDY
+        .GLOBL  SEED,HCNT,CCNT  ; the state, named in the link map for the tests
+
+; --- the board ----------------------------------------------------------
+WIDTH  = 20.
+HEIGHT = 10.
+PW     = 24.                    ; the padded row: two edge cells each side
+PH     = 14.
+NCELLS = PW*PH                  ; 336
+CELL0  = <2*PW>+2               ; the index of (0,0)
+CUNIT  = 200                    ; a unit is here
+COWN   = 100                    ; the computer's (clear: the human's)
+CMOVD  = 10                     ; has moved this round
+CSTG   = 3                      ; the stage: 0 infantry, 1 and 2
+SFACT  = 3                      ;   fortification, 3 the factory
+CEDGE  = 40                     ; off the map: not a unit, not empty
+
+; --- the keys, as the MS7004 sends them --------------------------------
+KTAB   = 276
+KSPC   = 324
+KUP    = 252
+KDOWN  = 251
+KLEFT  = 247
+KRIGHT = 250
+KS     = 316
+KL     = 347
+KQ     = 303
+KN     = 334
+
+; --- the colours: an attribute byte is flash, bright, paper, ink -------
+ABRT   = 100                    ; bright
+AFLSH  = 200                    ; flash: the cursor
+AHUM   = 4                      ; the human's units: green
+ACPU   = 2                      ; the computer's: red
+ASEL   = 10                     ; the selected unit: on blue paper
+AFOG   = 1                      ; the fog: dim blue
+AEMP   = 7                      ; an empty cell in view: dim white
+ATXT   = 107                    ; the text: bright white
+AHLP   = 7                      ; the help line: dim white
+
+; --- the start ----------------------------------------------------------
+START:  JSR     PC,HWINIT
+        JSR     PC,NEWGAM
+        JSR     PC,REDRAW
+MLOOP:  JSR     PC,KEY
+        TST     R0
+        BEQ     MLOOP
+        JSR     PC,ONKEY
+        BR      MLOOP
+
+; ONKEY: R0 = a key's code; the handler of a key of ours, or nothing.
+ONKEY:  MOV     #KEYTAB,R1
+1$:     MOV     (R1)+,R2
+        BEQ     9$
+        CMP     R0,R2
+        BEQ     2$
+        TST     (R1)+
+        BR      1$
+2$:     JMP     @(R1)+
+9$:     RTS     PC
+KEYTAB: .WORD   KTAB,KTABK, KSPC,KSPCK
+        .WORD   KUP,KUPK, KDOWN,KDOWNK, KLEFT,KLEFTK, KRIGHT,KRGHTK
+        .WORD   KS,KSAVEK, KL,KLOADK, KQ,KQUIT, KN,KNEW
+        .WORD   0
+
+KQUIT:  JSR     PC,HWEXIT
+        .EXIT
+
+KNEW:   TST     GSTATE          ; a new game once this one is over
+        BEQ     1$
+        JSR     PC,NEWGAM
+        JSR     PC,REDRAW
+1$:     RTS     PC
+
+; TAB: the next unmoved unit - the combat units round and round, then
+; the factories.
+KTABK:  TST     SEL
+        BMI     1$
+        JSR     PC,NEXTSL
+        JSR     PC,REDRAW
+1$:     RTS     PC
+
+; The arrows: the cursor a step from the selected unit, no further.
+KUPK:   TST     SEL
+        BMI     1$
+        CMP     CDY,#-1
+        BLE     1$
+        DEC     CDY
+        JSR     PC,REDRAW
+1$:     RTS     PC
+KDOWNK: TST     SEL
+        BMI     1$
+        CMP     CDY,#1
+        BGE     1$
+        INC     CDY
+        JSR     PC,REDRAW
+1$:     RTS     PC
+KLEFTK: TST     SEL
+        BMI     1$
+        CMP     CDX,#-1
+        BLE     1$
+        DEC     CDX
+        JSR     PC,REDRAW
+1$:     RTS     PC
+KRGHTK: TST     SEL
+        BMI     1$
+        CMP     CDX,#1
+        BGE     1$
+        INC     CDX
+        JSR     PC,REDRAW
+1$:     RTS     PC
+
+; SPACE: the selected unit's move to the cursor's cell.
+KSPCK:  TST     SEL
+        BMI     1$
+        JSR     PC,DOMOVE
+1$:     RTS     PC
+
+KSAVEK: TST     SEL             ; between moves of the human's turn
+        BMI     1$
+        JSR     PC,SAVE
+        JSR     PC,REDRAW
+1$:     RTS     PC
+
+KLOADK: JSR     PC,LOAD
+        JSR     PC,REDRAW
+        RTS     PC
+
+; --- the human's move -----------------------------------------------------
+DOMOVE: MOV     SEL,R0
+        JSR     PC,TARGET
+        JSR     PC,APPLY
+        BCC     1$
+        MOV     #MINVAL,MSG
+        JSR     PC,CLICK
+        JSR     PC,REDRAW
+        RTS     PC
+1$:     JSR     PC,AFTMOV
+        RTS     PC
+
+; TARGET: R1 = the cursor's cell, SEL + dy * 24 + dx.  Keeps R0.
+TARGET: MOV     CDY,R1
+        ASL     R1
+        ASL     R1
+        ASL     R1
+        MOV     R1,R2
+        ASL     R1
+        ADD     R2,R1
+        ADD     CDX,R1
+        ADD     SEL,R1
+        RTS     PC
+
+; AFTMOV: after a move applied from R0 to R1 - the view widened round
+; both cells, the game checked for its end, the next unit selected; when
+; none is left the computer plays and a new round begins.
+AFTMOV: MOV     R1,-(SP)
+        JSR     PC,VISADD
+        MOV     (SP)+,R0
+        JSR     PC,VISADD
+        JSR     PC,WINCHK
+        TST     GSTATE
+        BNE     8$
+        JSR     PC,NEXTSL
+        TST     R0
+        BPL     7$
+        JSR     PC,CPUTRN
+        TST     GSTATE
+        BNE     8$
+7$:     JSR     PC,REDRAW
+        RTS     PC
+8$:     MOV     #-1,SEL
+        JSR     PC,REDRAW
+        RTS     PC
+
+; --- the rules: APPLY ---------------------------------------------------
+; R0 = the cell of the unit that moves, R1 = the cell it steps to (R0
+; itself to stand).  Applies the move to the board and returns with C
+; clear, or refuses it with C set and the board untouched.  Keeps R0
+; and R1.
+APPLY:  MOVB    BOARD(R0),R2    ; R2 = the unit
+        BIC     #177400,R2
+        CMP     R0,R1
+        BEQ     50$
+        MOVB    BOARD(R1),R3    ; R3 = what is at the target
+        BIC     #177400,R3
+        MOV     R2,R4
+        BIC     #^C<CSTG>,R4
+        CMP     R4,#SFACT
+        BNE     10$
+        TST     R3              ; a factory builds on an empty cell only
+        BNE     90$
+        MOV     R2,R4
+        BIC     #^C<COWN>,R4
+        BIS     #CUNIT+CMOVD,R4
+        MOVB    R4,BOARD(R1)    ; the new infantry, moved already
+        BIS     #1,R4
+        MOVB    R4,BOARD(R0)    ; the factory spent: fortification 1
+        BR      80$
+10$:    MOV     R2,R4           ; a combat unit steps as an infantry
+        BIC     #^C<COWN>,R4
+        BIS     #CUNIT+CMOVD,R4 ; R4 = the mover as it will be
+        TST     R3
+        BNE     20$
+        MOVB    R4,BOARD(R1)    ; an empty cell: it moves there
+        CLRB    BOARD(R0)
+        BR      80$
+20$:    BIT     #CUNIT,R3       ; off the map
+        BEQ     90$
+        MOV     R2,R5
+        XOR     R3,R5
+        BIT     #COWN,R5        ; its own: no
+        BEQ     90$
+        MOV     R3,R5
+        BIC     #^C<CSTG>,R5
+        CMP     R5,#1
+        BEQ     30$
+        CMP     R5,#2
+        BEQ     30$
+        MOVB    R4,BOARD(R1)    ; an infantry or a factory: killed, the
+        CLRB    BOARD(R0)       ;   cell taken
+        BR      80$
+30$:    CLRB    BOARD(R0)       ; a fortification: the attacker dies and
+        BICB    #CSTG,BOARD(R1) ;   the fortification is an infantry now
+        BR      80$
+50$:    MOV     R2,R4           ; standing: a stage up, a factory stays
+        BIC     #^C<CSTG>,R4
+        CMP     R4,#SFACT
+        BEQ     51$
+        INC     R2
+51$:    BIS     #CMOVD,R2
+        MOVB    R2,BOARD(R0)
+80$:    CLC
+        RTS     PC
+90$:    SEC
+        RTS     PC
+
+; --- the turn --------------------------------------------------------------
+; BEGTRN: R0 = the player (0 or COWN) whose turn begins: their units
+; unmoved, their view drawn afresh round each, their first unit selected.
+BEGTRN: MOV     R0,TURN
+        CLR     PHASE
+        MOV     #VISH,VISP
+        TST     R0
+        BEQ     1$
+        MOV     #VISC,VISP
+1$:     MOV     VISP,R1
+        MOV     #NCELLS,R2
+2$:     CLRB    (R1)+
+        SOB     R2,2$
+        CLR     R0
+        MOV     #NCELLS,R2
+3$:     MOVB    BOARD(R0),R1
+        BPL     4$
+        BIC     #^C<COWN>,R1
+        CMP     R1,TURN
+        BNE     4$
+        BICB    #CMOVD,BOARD(R0)
+        JSR     PC,VISADD
+4$:     INC     R0
+        SOB     R2,3$
+        MOV     #-1,SEL
+        JSR     PC,NEXTSL
+        RTS     PC
+
+; NEXTSL: the next unmoved unit of the player whose turn it is, scanning
+; on from SEL round the board: in PHASE 0 a combat unit, in PHASE 1 a
+; factory.  When phase 0 has none left it becomes phase 1; when that has
+; none the turn is over.  R0 = SEL = the cell, or -1; the cursor on it.
+NEXTSL: MOV     SEL,R0
+        INC     R0
+1$:     MOV     #NCELLS,R2
+2$:     CMP     R0,#NCELLS
+        BLO     3$
+        CLR     R0
+3$:     MOVB    BOARD(R0),R1
+        BPL     5$
+        BIT     #CMOVD,R1
+        BNE     5$
+        MOV     R1,R3
+        BIC     #^C<COWN>,R3
+        CMP     R3,TURN
+        BNE     5$
+        BIC     #^C<CSTG>,R1
+        CMP     R1,#SFACT
+        BEQ     4$
+        TST     PHASE           ; a combat unit: wanted in phase 0
+        BNE     5$
+        BR      6$
+4$:     TST     PHASE           ; a factory: wanted in phase 1
+        BEQ     5$
+6$:     MOV     R0,SEL
+        CLR     CDX
+        CLR     CDY
+        RTS     PC
+5$:     INC     R0
+        SOB     R2,2$
+        TST     PHASE           ; none: on to the factories, once
+        BNE     7$
+        INC     PHASE
+        CLR     R0
+        BR      1$
+7$:     MOV     #-1,R0
+        MOV     R0,SEL
+        RTS     PC
+
+; VISADD: R0 = a cell; when a unit of the player whose turn it is stands
+; there, the cells within its radius (1, or 2 for a fortification) go
+; into that player's view.  Keeps every register.
+VISADD: MOV     R1,-(SP)
+        MOV     R2,-(SP)
+        MOV     R3,-(SP)
+        MOV     R4,-(SP)
+        MOV     R5,-(SP)
+        MOVB    BOARD(R0),R1
+        BPL     9$
+        BIC     #^C<COWN>,R1
+        CMP     R1,TURN
+        BNE     9$
+        MOVB    BOARD(R0),R1
+        BIC     #^C<CSTG>,R1
+        MOV     #1,R2           ; R2 = the radius
+        CMP     R1,#1
+        BLO     1$
+        CMP     R1,#2
+        BHI     1$
+        MOV     #2,R2
+1$:     MOV     R2,R3           ; R3 = dy, from -r to r
+        NEG     R3
+2$:     MOV     R3,R1           ; the row's first cell: R0 + dy * 24 - r
+        ASL     R1
+        ASL     R1
+        ASL     R1
+        MOV     R1,R4
+        ASL     R1
+        ADD     R4,R1
+        ADD     R0,R1
+        SUB     R2,R1
+        MOV     R2,R4           ; 2r + 1 cells along it
+        ASL     R4
+        INC     R4
+3$:     CMPB    BOARD(R1),#CEDGE
+        BEQ     4$
+        MOV     R1,R5
+        ADD     VISP,R5
+        MOVB    #1,(R5)
+4$:     INC     R1
+        SOB     R4,3$
+        INC     R3
+        CMP     R3,R2
+        BLE     2$
+9$:     MOV     (SP)+,R5
+        MOV     (SP)+,R4
+        MOV     (SP)+,R3
+        MOV     (SP)+,R2
+        MOV     (SP)+,R1
+        RTS     PC
+
+; WINCHK: the units counted, HCNT and CCNT; the game over when a side
+; has none - GSTATE 1 the human wins, 2 the computer.
+WINCHK: CLR     HCNT
+        CLR     CCNT
+        MOV     #NCELLS,R1
+        MOV     #BOARD,R2
+1$:     MOVB    (R2)+,R0
+        BPL     2$
+        BIT     #COWN,R0
+        BNE     3$
+        INC     HCNT
+        BR      2$
+3$:     INC     CCNT
+2$:     SOB     R1,1$
+        TST     CCNT
+        BNE     4$
+        MOV     #1,GSTATE
+        MOV     #MWIN,MSG
+        RTS     PC
+4$:     TST     HCNT
+        BNE     5$
+        MOV     #2,GSTATE
+        MOV     #MLOSE,MSG
+5$:     RTS     PC
+
+; --- the computer's turn -------------------------------------------------
+; CPUTRN: every unit of the computer's moves, each as AIMOVE chooses,
+; the ones in the human's view shown as they go; then the round is over
+; and the human's turn begins.
+CPUTRN: MOV     #MCPU,MSG
+        JSR     PC,REDRAW
+        MOV     #COWN,R0
+        JSR     PC,BEGTRN
+1$:     TST     SEL
+        BMI     3$
+        MOV     SEL,R0
+        JSR     PC,AIMOVE       ; R1 = the cell it chooses
+        MOV     SEL,R0
+        JSR     PC,APPLY
+        BCC     2$
+        MOV     SEL,R0          ; a choice the rules refuse: it stands
+        MOV     R0,R1
+        JSR     PC,APPLY
+2$:     JSR     PC,VISADD       ; both cells into its view (VISADD keeps
+        MOV     R0,-(SP)        ;   every register)
+        MOV     R1,R0
+        JSR     PC,VISADD
+        MOV     (SP)+,R0
+        JSR     PC,SHOWMV
+        JSR     PC,WINCHK
+        TST     GSTATE
+        BNE     4$
+        JSR     PC,NEXTSL
+        BR      1$
+3$:     INC     ROUND
+        CLR     R0
+        JSR     PC,BEGTRN
+        MOV     #MYOUR,MSG
+4$:     RTS     PC
+
+; SHOWMV: R0, R1 = the two cells of a move; when the human sees either,
+; the board is shown and a moment passes.
+SHOWMV: TSTB    VISH(R0)
+        BNE     1$
+        TSTB    VISH(R1)
+        BEQ     2$
+1$:     JSR     PC,REDRAW
+        MOV     #8.,R0
+        JSR     PC,WAIT
+2$:     RTS     PC
+
+; AIMOVE: R0 = the cell of a unit of the computer's; R1 = the cell it
+; steps to (R0 to stand).  For now every unit stands.
+AIMOVE: MOV     R0,R1
+        RTS     PC
+
+; --- a new game --------------------------------------------------------------
+NEWGAM: MOV     #BOARD,R1       ; the frame all round
+        MOV     #NCELLS,R2
+1$:     MOVB    #CEDGE,(R1)+
+        SOB     R2,1$
+        MOV     #BOARD+CELL0,R1 ; the map empty
+        MOV     #HEIGHT,R2
+2$:     MOV     R1,R0
+        MOV     #WIDTH,R3
+3$:     CLRB    (R0)+
+        SOB     R3,3$
+        ADD     #PW,R1
+        SOB     R2,2$
+        MOVB    #CUNIT+2,BOARD+CELL0+<4*PW>+4          ; the human's fortification 2 at (4,4)
+        MOVB    #CUNIT+COWN+2,BOARD+CELL0+<5*PW>+15.   ; the computer's at (15,5)
+        MOV     #1,ROUND
+        CLR     GSTATE
+        MOV     FRAMES,SEED
+        MOV     #MYOUR,MSG
+        JSR     PC,WINCHK
+        CLR     R0
+        JSR     PC,BEGTRN
+        RTS     PC
+
+; --- the screen -----------------------------------------------------------------
+; REDRAW: the whole board and the lines under it.
+REDRAW: MOV     #-1,CURIDX      ; the cursor's cell, for DRAWCL
+        TST     SEL
+        BMI     1$
+        JSR     PC,TARGET
+        MOV     R1,CURIDX
+1$:     CLR     R5              ; R5 = the row, R4 = the column
+2$:     CLR     R4
+3$:     MOV     R4,R0
+        MOV     R5,R1
+        JSR     PC,DRAWCL
+        INC     R4
+        CMP     R4,#WIDTH
+        BLO     3$
+        INC     R5
+        CMP     R5,#HEIGHT
+        BLO     2$
+        JSR     PC,STATUS
+        RTS     PC
+
+; DRAWCL: the cell at column R0, row R1 - the fog, an empty cell, or a
+; unit in its owner's colour, bright while it has a move to make; the
+; selected unit on blue, the cursor's cell flashing.
+DRAWCL: MOV     R0,-(SP)
+        MOV     R1,-(SP)
+        MOV     R1,R2           ; R2 = CELL0 + y * 24 + x
+        ASL     R2
+        ASL     R2
+        ASL     R2
+        MOV     R2,R1
+        ASL     R1
+        ADD     R1,R2
+        ADD     R0,R2
+        ADD     #CELL0,R2
+        MOV     #TFOG,TILE
+        MOVB    #AFOG,TATTR
+        TSTB    VISH(R2)
+        BEQ     8$
+        MOV     #TEMPTY,TILE
+        MOVB    #AEMP,TATTR
+        MOVB    BOARD(R2),R1
+        BPL     7$
+        MOV     R1,R0
+        BIC     #^C<CSTG>,R0
+        ASL     R0
+        MOV     TILES(R0),TILE
+        MOV     #AHUM,R0
+        BIT     #COWN,R1
+        BEQ     4$
+        MOV     #ACPU,R0
+4$:     BIT     #CMOVD,R1
+        BNE     5$
+        BIS     #ABRT,R0
+5$:     MOVB    R0,TATTR
+7$:     CMP     R2,SEL
+        BNE     6$
+        BISB    #ASEL,TATTR
+6$:     CMP     R2,CURIDX
+        BNE     8$
+        BISB    #AFLSH,TATTR
+8$:     MOV     (SP)+,R1
+        MOV     (SP)+,R0
+        MOV     TILE,R2
+        JSR     PC,DRAWC
+        RTS     PC
+TILES:  .WORD   TINF,TFRT1,TFRT2,TFAC
+TILE:   .WORD   0
+CURIDX: .WORD   0
+
+; STATUS: the round and the counts, the message, the keys.
+STATUS: MOV     ROUND,R0
+        MOV     #STLINE+6,R1
+        JSR     PC,DEC3
+        MOV     HCNT,R0
+        MOV     #STLINE+16.,R1
+        JSR     PC,DEC3
+        MOV     CCNT,R0
+        MOV     #STLINE+26.,R1
+        JSR     PC,DEC3
+        MOVB    #ATXT,TATTR
+        MOV     #1,R0
+        MOV     #168.,R1
+        MOV     #STLINE,R2
+        JSR     PC,TEXT
+        MOV     #1,R0
+        MOV     #184.,R1
+        MOV     #BLANK,R2
+        JSR     PC,TEXT
+        MOV     #1,R0
+        MOV     #184.,R1
+        MOV     MSG,R2
+        JSR     PC,TEXT
+        MOVB    #AHLP,TATTR
+        MOV     #1,R0
+        MOV     #192.,R1
+        MOV     #HELP,R2
+        JSR     PC,TEXT
+        RTS     PC
+
+; DEC3: R0 (0..999) as three digits at R1.
+DEC3:   MOV     #100.,R2
+        JSR     PC,DIGIT
+        MOV     #10.,R2
+        JSR     PC,DIGIT
+        ADD     #'0,R0
+        MOVB    R0,(R1)+
+        RTS     PC
+DIGIT:  MOVB    #'0,(R1)
+1$:     CMP     R0,R2
+        BLO     2$
+        SUB     R2,R0
+        INCB    (R1)
+        BR      1$
+2$:     INC     R1
+        RTS     PC
+
+STLINE: .ASCIZ  /ROUND 000   YOU 000   CPU 000/
+BLANK:  .ASCIZ  /                                      /
+HELP:   .ASCIZ  /TAB SPACE ARROWS  S=SAVE L=LOAD Q=QUIT/
+MYOUR:  .ASCIZ  /YOUR MOVE/
+MINVAL: .ASCIZ  /IMPOSSIBLE MOVE/
+MCPU:   .ASCIZ  /THE COMPUTER MOVES/
+MWIN:   .ASCIZ  /YOU WIN!  N = NEW GAME/
+MLOSE:  .ASCIZ  /YOU LOSE.  N = NEW GAME/
+MSAVED: .ASCIZ  /GAME SAVED/
+MLOADD: .ASCIZ  /GAME LOADED/
+MNOSAV: .ASCIZ  /NO SAVED GAME/
+MSVERR: .ASCIZ  /CANNOT SAVE/
+        .EVEN
+MSG:    .WORD   MYOUR
+VISP:   .WORD   VISH            ; the view of the player whose turn it is
+
+; --- saving and loading -----------------------------------------------------
+; The state below, SAVBEG to SAVEND, goes to DK:CELWAR.GAM as it is;
+; loading it brings the game back where it was, mid-turn included.
+SAVE:   .ENTER  #FAREA,#1,#FNAME,#SAVBLK
+        BCS     9$
+        .WRITW  #FAREA,#1,#SAVBEG,#SAVLEN,#0
+        BCS     8$
+        .CLOSE  #1
+        MOV     #MSAVED,MSG
+        RTS     PC
+8$:     .CLOSE  #1
+9$:     MOV     #MSVERR,MSG
+        RTS     PC
+
+LOAD:   .LOOKUP #FAREA,#1,#FNAME
+        BCS     9$
+        .READW  #FAREA,#1,#SAVBEG,#SAVLEN,#0
+        BCS     8$
+        .CLOSE  #1
+        MOV     #VISH,VISP
+        TST     TURN
+        BEQ     1$
+        MOV     #VISC,VISP
+1$:     JSR     PC,WINCHK
+        MOV     #MLOADD,MSG
+        RTS     PC
+8$:     .CLOSE  #1
+9$:     MOV     #MNOSAV,MSG
+        RTS     PC
+
+FAREA:  .BLKW   5
+FNAME:  .RAD50  /DK /
+        .RAD50  /CELWAR/
+        .RAD50  /GAM/
+
+; --- the state ---------------------------------------------------------------------
+        .EVEN
+SAVBEG:
+BOARD:  .BLKB   NCELLS
+VISH:   .BLKB   NCELLS
+VISC:   .BLKB   NCELLS
+TURN:   .WORD   0               ; 0 the human, COWN the computer
+PHASE:  .WORD   0               ; 0 the combat units, 1 the factories
+ROUND:  .WORD   0
+GSTATE: .WORD   0               ; 0 in play, 1 the human won, 2 the computer
+SEL:    .WORD   0               ; the selected unit's cell, -1 none
+CDX:    .WORD   0               ; the cursor's step from it
+CDY:    .WORD   0
+SEED:   .WORD   0
+HCNT:   .WORD   0
+CCNT:   .WORD   0
+SAVEND:
+SAVLEN = <SAVEND-SAVBEG>/2
+SAVBLK = 3
+        .END    START
