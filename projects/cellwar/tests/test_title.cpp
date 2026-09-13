@@ -67,3 +67,24 @@ TEST_CASE("cellwar: the grid closes on the right and below where the view ends")
     CHECK(g.pixels(4, 5, 15, false) == 0x80);                   // (4,6) is seen: the left line only
     CHECK(g.pixels(2, 4, 0, false) == 0xFF);                    // the top and left lines as before
 }
+
+TEST_CASE("cellwar title: the demo comes to blows")
+{
+    if (!cellwar::built()) { MESSAGE("CELLWAR not built - skipped"); return; }
+    CellwarGame g("cellwar_demofight", true, 200);
+    g.awaitTitle();
+    g.settle(600);
+    REQUIRE(g.peek16("MODE") == 1);
+    int human = g.count(false), cpu = g.count(true);
+    bool blood = false;
+    for (int i = 0; i < 12000 && !blood; ++i) {
+        g.step();
+        if (g.peek16("MODE") != 1) break;                       // over: the title again
+        const int h = g.count(false), c = g.count(true);
+        blood = h < human || c < cpu;
+        human = h > human ? h : human;
+        cpu = c > cpu ? c : cpu;
+    }
+    CHECK(blood);                                               // somebody died
+    CHECK(g.peek16("ROUND") < 30);                              //   and not late
+}

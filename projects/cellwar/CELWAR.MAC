@@ -659,8 +659,9 @@ SKDANG = 20.                    ; less, for each enemy that can strike the kille
 SHITP  = 50.                    ; hitting a fortification with a partner next
                                 ;   to it to finish it off
 SHITA  = -100.                  ; hitting one alone: the attacker dies for nothing
-SDANG  = 35.                    ; a step next to an enemy combat unit: it strikes first
-SAPPR  = 8.                     ; a step nearer the goal
+SDANG  = 35.                    ; a step next to an enemy combat unit: it strikes
+SDANGL = 12.                    ;   first - less by half the pressure, this at least
+SAPPR  = 12.                    ; a step nearer the goal
 SFACN  = 30.                    ; a step next to an enemy factory: the kill comes next
 SROOM  = 15.                    ; a step next to an own factory: it needs room to build
 SSTAY0 = 10.                    ; standing as an infantry
@@ -669,8 +670,12 @@ SSTAY2 = 18.                    ; standing as fortification 2: a factory, with n
 SFACNR = -40.                   ;   enemy within SNEAR; and with one
 SGUARD = 25.                    ; standing with one enemy next door: the
                                 ;   fortification takes the hit
-SQUIET = 15.                    ; standing with no enemy in view: the economy
-SPRESS = 3.                     ; a step forward, per unit above four: the army
+SQUIET = 15.                    ; standing with no enemy in view, when the side
+NBUILD = 2                      ;   has fewer builders than this (a builder is a
+                                ;   unit past the infantry): the economy
+SGO    = 10.                    ; standing with no enemy in view otherwise: the
+                                ;   army marches on the enemy's start
+SPRESS = 4.                     ; a step forward, per infantry above two: the army
 SPRMAX = 30.                    ;   goes to war as it grows, this much at most
 SPROD  = 10.                    ; a factory building
 SPRODD = 10.                    ; less, per enemy next to the new unit
@@ -688,13 +693,13 @@ AIMOVE: MOV     R0,AIC
         MOV     #PENEMY,R2
         JSR     PC,NBSCAN
         MOV     R0,AIDNG        ; enemies next to the unit
-        CLR     AIPRSS          ; the army's pressure forward: SPRESS a unit
-        MOV     CCNT,R0         ;   above four
-        SUB     #4,R0
+        JSR     PC,ARMY         ; AINF, AIBLD: the side's infantry and builders
+        CLR     AIPRSS          ; the army's pressure forward: SPRESS an
+        MOV     AINF,R0         ;   infantry above two
+        SUB     #2,R0
         BLE     1$
-        MOV     R0,R1
-        ADD     R0,R0
-        ADD     R1,R0
+        ASL     R0
+        ASL     R0
         CMP     R0,#SPRMAX
         BLE     2$
         MOV     #SPRMAX,R0
@@ -736,6 +741,26 @@ BETTER: MOV     SEED,R2         ; the next of the sequence: seed * 5 + 1
         MOV     R1,AIBT
 1$:     RTS     PC
 
+; ARMY: AINF = the side's infantry, AIBLD = its builders (the units past
+; the infantry: they are on their way to a factory, or are one).
+ARMY:   CLR     AINF
+        CLR     AIBLD
+        MOV     #NCELLS,R2
+        CLR     R1
+1$:     MOV     R1,R0
+        JSR     PC,OWNU
+        TST     R0
+        BEQ     3$
+        MOVB    BOARD(R1),R0
+        BIC     #^C<CSTG>,R0
+        BNE     2$
+        INC     AINF
+        BR      3$
+2$:     INC     AIBLD
+3$:     INC     R1
+        SOB     R2,1$
+        RTS     PC
+
 ; SCSTAY: R0 = the score of standing.
 SCSTAY: MOV     AIS,R0
         CMP     R0,#SFACT
@@ -759,10 +784,19 @@ SCSTAY: MOV     AIS,R0
         CMP     AIS,#2
         BHIS    3$
         ADD     #SGUARD,R0
-3$:     TST     AIGK
-        BNE     4$
-        ADD     #SQUIET,R0
-4$:     RTS     PC
+3$:     TST     AIGK            ; nothing in view: the economy needs a few
+        BNE     6$              ;   builders, the war the rest
+        MOV     AIBLD,R1
+        TST     AIS
+        BNE     5$
+        CMP     R1,#NBUILD      ; an infantry: one more builder wanted?
+        BLT     4$
+        SUB     #SGO,R0
+        BR      6$
+5$:     CMP     R1,#NBUILD+1    ; a builder: one too many?
+        BGT     6$
+4$:     ADD     #SQUIET,R0
+6$:     RTS     PC
 STAYS:  .WORD   SSTAY0,SSTAY1,SSTAY2
 
 ; SCSTEP: R0 = the score of the step to AIT, or C set when the rules
@@ -793,8 +827,17 @@ SCSTEP: MOV     AIT,R1
         MOV     (SP)+,R0
         TST     R1
         BEQ     13$
-12$:    SUB     #SDANG,R0
+        MOV     R2,-(SP)        ; the danger, less by half the pressure
+        MOV     #SDANG,R2
+        MOV     AIPRSS,-(SP)
+        ASR     (SP)
+        SUB     (SP)+,R2
+        CMP     R2,#SDANGL
+        BGE     12$
+        MOV     #SDANGL,R2
+12$:    SUB     R2,R0
         SOB     R1,12$
+        MOV     (SP)+,R2
 13$:    MOV     R0,-(SP)
         MOV     AIT,R0
         MOV     #PEFAC,R2
@@ -1087,6 +1130,8 @@ AIG:    .WORD   0               ; the goal
 AIGK:   .WORD   0               ; an enemy is in view
 AIDNG:  .WORD   0               ; enemies next to the unit
 AIPRSS: .WORD   0               ; the pressure forward
+AINF:   .WORD   0               ; the side's infantry
+AIBLD:  .WORD   0               ; the side's builders
 AIBEST: .WORD   0               ; the best score so far
 AIBT:   .WORD   0               ;   and its step
 AINB:   .WORD   0
