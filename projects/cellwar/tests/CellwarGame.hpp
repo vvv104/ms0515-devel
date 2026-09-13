@@ -236,6 +236,9 @@ public:
     /* What RT-11 printed on the console since the game started. */
     const std::string &console() const { return console_; }
 
+    /* The folder device the game runs from: files the game makes land here. */
+    const fs::path &bootDir() const { return boot_; }
+
     const uint8_t *vram() { return board_get_vram(&board()); }
     int vramNonzero()
     {

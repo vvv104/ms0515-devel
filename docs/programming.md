@@ -109,6 +109,12 @@ program needs of it:
   puts it back, so a `.READW` in the middle costs nothing but the ticks
   during it.  FIST kept time on timer channel 1 instead (the printer's
   baud generator, unused), read by polling.
+- **The dispatcher reads back** (the PPI latches it): save it at the
+  start and put it back at the exit rather than writing 002177 from a
+  table.  CELWAR, started by `STARTS.COM` on the toolset's folder device,
+  found 003177 - the timer interrupt bit on - and RT-11 kept it so after
+  the exit; what a program finds depends on the kit and on what the
+  monitor was doing when it started it.
 - **Dispatcher bit 8 is the monitor interrupt's request itself**, a
   level: writing 1 makes vector 064 pending, writing 0 takes the request
   back and raises nothing (NS4 4.3).  RT-11's terminal service clears it
