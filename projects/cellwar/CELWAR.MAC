@@ -656,6 +656,7 @@ FLASHC: .WORD   -1
 SKFAC  = 120.                   ; killing a factory
 SKINF  = 80.                    ; killing an infantry
 SKDANG = 20.                    ; less, for each enemy that can strike the killer
+SKDNGL = 6.                     ;   - less by half the pressure, this at least
 SHITP  = 50.                    ; hitting a fortification with a partner next
                                 ;   to it to finish it off
 SHITA  = -100.                  ; hitting one alone: the attacker dies for nothing
@@ -675,12 +676,16 @@ NBUILD = 2                      ;   has fewer builders than this (a builder is a
                                 ;   unit past the infantry): the economy
 SGO    = 10.                    ; standing with no enemy in view otherwise: the
                                 ;   army marches on the enemy's start
-SPRESS = 4.                     ; a step forward, per infantry above two: the army
-SPRMAX = 30.                    ;   goes to war as it grows, this much at most
+SPRESS = 3.                     ; the pressure: per unit above four, the army goes
+SPRMAX = 30.                    ;   to war as it grows, this much at most - a step
+                                ;   forward gains it, the fear of an enemy loses it
+SCROWD = 5.                     ; standing in a crowd: per own neighbour above
+                                ;   three; and a unit made among own neighbours
 SPROD  = 10.                    ; a factory building
 SPRODD = 10.                    ; less, per enemy next to the new unit
 SFSTAY = -10.                   ; a factory standing instead
 SNEAR  = 3                      ; "near": within this many cells
+SFAR   = 5                      ; "in view" for a unit: an enemy seen within this
 
 ; AIMOVE: R0 = the cell of a unit of the computer's; R1 = the cell it
 ; steps to (R0 to stand).
@@ -694,12 +699,14 @@ AIMOVE: MOV     R0,AIC
         JSR     PC,NBSCAN
         MOV     R0,AIDNG        ; enemies next to the unit
         JSR     PC,ARMY         ; AINF, AIBLD: the side's infantry and builders
-        CLR     AIPRSS          ; the army's pressure forward: SPRESS an
-        MOV     AINF,R0         ;   infantry above two
-        SUB     #2,R0
+        CLR     AIPRSS          ; the army's pressure: SPRESS a unit above four
+        MOV     AINF,R0
+        ADD     AIBLD,R0
+        SUB     #4,R0
         BLE     1$
-        ASL     R0
-        ASL     R0
+        MOV     R0,R1
+        ADD     R0,R0
+        ADD     R1,R0
         CMP     R0,#SPRMAX
         BLE     2$
         MOV     #SPRMAX,R0
@@ -773,6 +780,7 @@ SCSTAY: MOV     AIS,R0
         BNE     2$
         MOV     R0,-(SP)        ; a factory next: not with an enemy near
         MOV     AIC,R0
+        MOV     #SNEAR,R1
         JSR     PC,SEENNR
         MOV     R0,R1
         MOV     (SP)+,R0
@@ -784,19 +792,35 @@ SCSTAY: MOV     AIS,R0
         CMP     AIS,#2
         BHIS    3$
         ADD     #SGUARD,R0
-3$:     TST     AIGK            ; nothing in view: the economy needs a few
-        BNE     6$              ;   builders, the war the rest
-        MOV     AIBLD,R1
-        TST     AIS
+3$:     MOV     AIBLD,R1        ; the economy needs a few builders, the war
+        TST     AIS             ;   the rest
         BNE     5$
-        CMP     R1,#NBUILD      ; an infantry: one more builder wanted?
+        MOV     R0,-(SP)        ; an infantry with no enemy near: one more
+        MOV     AIC,R0          ;   builder wanted, or off to war
+        MOV     #SFAR,R1
+        JSR     PC,SEENNR
+        MOV     R0,R1
+        MOV     (SP)+,R0
+        TST     R1
+        BNE     6$
+        CMP     AIBLD,#NBUILD
         BLT     4$
         SUB     #SGO,R0
         BR      6$
-5$:     CMP     R1,#NBUILD+1    ; a builder: one too many?
-        BGT     6$
+5$:     CMP     R1,#NBUILD+1    ; a builder keeps building, an enemy near or
+        BGT     6$              ;   not, unless the side has one too many
 4$:     ADD     #SQUIET,R0
-6$:     RTS     PC
+6$:     MOV     R0,-(SP)        ; in a crowd of its own: out of it
+        MOV     AIC,R0
+        MOV     #OWNU,R2
+        JSR     PC,NBSCAN
+        MOV     R0,R1
+        MOV     (SP)+,R0
+        SUB     #3,R1
+        BLE     7$
+8$:     SUB     #SCROWD,R0
+        SOB     R1,8$
+7$:     RTS     PC
 STAYS:  .WORD   SSTAY0,SSTAY1,SSTAY2
 
 ; SCSTEP: R0 = the score of the step to AIT, or C set when the rules
@@ -805,8 +829,10 @@ SCSTEP: MOV     AIT,R1
         MOVB    BOARD(R1),R2
         BIC     #177400,R2
         CMP     R2,#CEDGE
-        BEQ     90$
-        CMP     AIS,#SFACT
+        BNE     5$
+        SEC                     ; off the map
+        RTS     PC
+5$:     CMP     AIS,#SFACT
         BNE     10$
         JMP     SCFAC           ; a factory's step is another matter
 10$:    TST     R2
@@ -876,7 +902,14 @@ SCSTEP: MOV     AIT,R1
         MOV     (SP)+,R0
         TST     R1
         BEQ     80$
-22$:    SUB     #SKDANG,R0
+        MOV     #SKDANG,R2      ; less by half the pressure
+        MOV     AIPRSS,-(SP)
+        ASR     (SP)
+        SUB     (SP)+,R2
+        CMP     R2,#SKDNGL
+        BGE     22$
+        MOV     #SKDNGL,R2
+22$:    SUB     R2,R0
         SOB     R1,22$
         BR      80$
 30$:    MOV     AIC,PSELF       ; a fortification: only with a partner
@@ -909,9 +942,19 @@ SCFAC:  TST     R2
         MOV     R0,R1
         MOV     (SP)+,R0
         TST     R1
-        BEQ     80$
+        BEQ     2$
 1$:     SUB     #SPRODD,R0      ; less for each enemy the new unit would face
         SOB     R1,1$
+2$:     MOV     R0,-(SP)        ; and for each own neighbour: out of the crowd
+        MOV     AIT,R0
+        MOV     #OWNU,R2
+        JSR     PC,NBSCAN
+        MOV     R0,R1
+        MOV     (SP)+,R0
+        TST     R1
+        BEQ     80$
+3$:     SUB     #SCROWD,R0
+        SOB     R1,3$
 80$:    CLC
         RTS     PC
 90$:    SEC
@@ -985,8 +1028,10 @@ ENEMY:  MOV     R2,-(SP)
         MOV     (SP)+,R2
         RTS     PC
 
-; SEENNR: R0 = a cell; R0 = 1 when an enemy in view is within SNEAR of it.
+; SEENNR: R0 = a cell, R1 = a distance; R0 = 1 when an enemy in view is
+; within that distance of the cell.
 SEENNR: MOV     R0,R4
+        MOV     R1,R5
         CLR     R3
 1$:     MOV     R3,R0
         JSR     PC,ENEMY
@@ -995,7 +1040,7 @@ SEENNR: MOV     R0,R4
         MOV     R4,R0
         MOV     R3,R1
         JSR     PC,DIST
-        CMP     R0,#SNEAR
+        CMP     R0,R5
         BLOS    3$
 2$:     INC     R3
         CMP     R3,#NCELLS
