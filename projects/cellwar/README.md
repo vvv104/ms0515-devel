@@ -12,17 +12,18 @@ the machine in another, like MANICM.
 rt11_devel/projects/cellwar/
 ├── README.md        this file
 ├── CELWAR.MAC       the game: the rules, the turn, the computer's play,
-│                    the screen, the saved game
-├── MS0515.MAC       the machine: cells and text over the VRAM window, the
-│                    keyboard by interrupt, the frame clock, a click
+│                    the title and the demo, the screen, the saved game
+├── MS0515.MAC       the machine: cells, text and pictures over the VRAM
+│                    window, the keyboard by interrupt, the frame clock,
+│                    the speaker's sounds
 ├── build.toml       the build: three objects, linked with a map
 ├── source/
-│   └── gen_art.py   pre_build: ART.MAC, the six tiles and the font, drawn
-│                    as text
+│   └── gen_art.py   pre_build: ART.MAC, the six tiles, the font and the
+│                    title's logo, drawn as text
 └── tests/           the harness: the game booted through the emulator library
 ```
 
-Build artifacts, never committed: `CELWAR.SAV` (13 blocks), `CELWAR.MAP`
+Build artifacts, never committed: `CELWAR.SAV` (18 blocks), `CELWAR.MAP`
 (the link map, which names the state the tests read), `ART.MAC`.
 
 ```
@@ -64,6 +65,12 @@ RT-11 names are six letters, so the program is `CELWAR`.
 `CELWAR.SAV` on an RT-11 volume, `R CELWAR` (`package/assets/disks/cellwar.dsk`
 boots straight into it: `ms0515-cli --disk0 cellwar.dsk`, then `R CELWAR`).
 
+The title comes up first - the logo in the Spectrum's rainbow over a
+field of the two armies.  SPACE starts a game, Q leaves; ten seconds of
+nothing and the demo begins: the computer plays both sides, each in its
+own fog but the whole board in view, until SPACE or Q.  A demo game
+over brings the title back.
+
 | key | what |
 |---|---|
 | TAB | the next unit that has a move to make: the combat units round and round, then the factories |
@@ -76,15 +83,20 @@ boots straight into it: `ms0515-cli --disk0 cellwar.dsk`, then `R CELWAR`).
 
 The selected unit sits on blue; the cursor's cell flashes; a unit that
 has moved this round is dim.  The human's units are green, the
-computer's red.  A refused move clicks and says so.  When the last unit
-has moved the computer plays, its moves in the human's view shown as they
-go, and the next round begins.
+computer's red; the grid closes on the right and below where the view
+ends.  A refused move clicks and says so.  Every move has its sound: a
+step rustles, a blow rings, standing thumps, a unit made whoops.  When
+the last unit has moved the computer plays, and each of its moves in the
+human's view is shown as it goes: the unit on white, then the cell it
+goes to on yellow, then the move, a blow flashing the cell it lands on.
+The keys pressed meanwhile are dropped; the next round begins.
 
 ## The computer's play
 
 `CELWAR.MAC`, "the computer's play": for each of its units in turn the
 nine steps are scored and the best taken, with a little chance thrown in.
-It sees only what its units see (`VISC`).  The scores are named
+It sees only what its units see (the view of the side it plays; in the
+demo it plays both, each side in its own fog).  The scores are named
 constants at the top of the section, made to be tuned: a kill (a factory
 above an infantry), a hit on a fortification only with a partner next to
 it to finish the job, a step next to an enemy combat unit costs (it
@@ -100,7 +112,11 @@ forward the larger it grows.  A factory always builds, toward the goal.
 ## The machine
 
 `MS0515.MAC` documents its interface at the top: take the machine, draw a
-cell, print a string, read a key, click, wait.  The board is 20 x 10
+cell, a picture or a string, read a key, forget the keys, the four
+sounds, click, wait.  A sound is a list of parts - a tone whose half
+period grows by a step after each toggle of the speaker, or noise with
+a random part added to the period - played by toggling register C bit
+6 in a timed loop.  The board is 20 x 10
 cells of 16 x 16 pixels in the 320 x 200 colour mode, the five text rows
 under it; a VRAM word is the attribute byte over eight pixels, so a cell
 is 16 rows of two words and a glyph 8 words down a column.  The window at
@@ -119,4 +135,6 @@ through the library and reads the board back: the stages, the moves, the
 attacks, the factory, the turn order, the fog, the end of the game, the
 exit; the computer's kills, its restraint before a lone fortification,
 the pair that takes one, its factory that builds; the game saved and
-loaded.  The suite skips itself when the game is not built.
+loaded; the title, the demo playing both sides, Q at the title, the
+grid's closed edges read off the screen.  The suite skips itself when
+the game is not built.
