@@ -43,7 +43,7 @@
         .GLOBL  CLICK,SNDHIT,SNDMOV,SNDSTD,SNDNEW,WAIT,FRAMES
         .GLOBL  TFOG,TEMPTY,TINF,TFRT1,TFRT2,TFAC,LOGO
         .GLOBL  BOARD,VISH,VISC,TURN,PHASE,ROUND,GSTATE,SEL,CDX,CDY
-        .GLOBL  SEED,HCNT,CCNT,MODE     ; the state, named in the link map for the tests
+        .GLOBL  SEED,HCNT,CCNT,MODE,RULES,FAST  ; the state, named in the link map for the tests
 
 ; --- the board ----------------------------------------------------------
 WIDTH  = 20.
@@ -58,6 +58,14 @@ CMOVD  = 10                     ; has moved this round
 CSTG   = 3                      ; the stage: 0 infantry, 1 and 2
 SFACT  = 3                      ;   fortification, 3 the factory
 CEDGE  = 40                     ; off the map: not a unit, not empty
+
+; --- the rules under trial: bits of RULES ------------------------------
+RCAPT  = 1                      ; an infantry onto an enemy factory becomes a factory
+RSUFF  = 2                      ; a unit with own units on all eight sides dies
+                                ;   at the end of its owner's turn
+RFEED  = 4                      ; an infantry that kills an infantry becomes fortification 1
+RSPEND = 10                     ; a factory that builds becomes an infantry, not fortification 1
+RSIGHT = 20                     ; an infantry sees 2, a fortification 1
 
 ; --- the keys, as the MS7004 sends them --------------------------------
 KTAB   = 276
@@ -340,9 +348,11 @@ APPLY:  MOVB    BOARD(R0),R2    ; R2 = the unit
         BIC     #^C<COWN>,R4
         BIS     #CUNIT+CMOVD,R4
         MOVB    R4,BOARD(R1)    ; the new infantry, moved already
+        BIT     #RSPEND,RULES
+        BNE     11$
         BIS     #1,R4
-        MOVB    R4,BOARD(R0)    ; the factory spent: fortification 1
-        BR      80$
+11$:    MOVB    R4,BOARD(R0)    ; the factory spent: fortification 1 (or,
+        BR      80$             ;   under RSPEND, an infantry)
 10$:    MOV     R2,R4           ; a combat unit steps as an infantry
         BIC     #^C<COWN>,R4
         BIS     #CUNIT+CMOVD,R4 ; R4 = the mover as it will be
@@ -363,8 +373,17 @@ APPLY:  MOVB    BOARD(R0),R2    ; R2 = the unit
         BEQ     30$
         CMP     R5,#2
         BEQ     30$
-        MOVB    R4,BOARD(R1)    ; an infantry or a factory: killed, the
-        CLRB    BOARD(R0)       ;   cell taken
+        TST     R5              ; an infantry killed: under RFEED the killer
+        BNE     21$             ;   is fortification 1 for it
+        BIT     #RFEED,RULES
+        BEQ     22$
+        BIS     #1,R4
+        BR      22$
+21$:    BIT     #RCAPT,RULES    ; a factory: under RCAPT the killer becomes
+        BEQ     22$             ;   a factory there
+        BIS     #SFACT,R4
+22$:    MOVB    R4,BOARD(R1)    ; the cell taken
+        CLRB    BOARD(R0)
         BR      80$
 30$:    CLRB    BOARD(R0)       ; a fortification: the attacker dies and
         BICB    #CSTG,BOARD(R1) ;   the fortification is an infantry now
@@ -385,9 +404,10 @@ APPLY:  MOVB    BOARD(R0),R2    ; R2 = the unit
 ; BEGTRN: R0 = the player (0 or COWN) whose turn begins: their units
 ; unmoved, their view drawn afresh round each, their first unit selected.
 BEGTRN: MOV     R0,TURN
+        JSR     PC,SUFFOC       ; the other side's turn is over
         CLR     PHASE
         MOV     #VISH,VISP
-        TST     R0
+        TST     TURN
         BEQ     1$
         MOV     #VISC,VISP
 1$:     MOV     VISP,R1
@@ -408,6 +428,39 @@ BEGTRN: MOV     R0,TURN
         MOV     #-1,SEL
         JSR     PC,NEXTSL
         RTS     PC
+
+; SUFFOC: under RSUFF, the units of the side whose turn is over (the
+; other side than TURN's) with own units on all eight sides die.
+SUFFOC: BIT     #RSUFF,RULES
+        BEQ     9$
+        MOV     TURN,R5
+        MOV     #COWN,R0
+        XOR     R0,R5           ; R5 = the other side
+        CLR     R4              ; R4 = the cell
+1$:     MOVB    BOARD(R4),R1
+        BPL     4$
+        BIC     #^C<COWN>,R1
+        CMP     R1,R5
+        BNE     4$
+        MOV     #NBOFF,R2       ; the eight neighbours all its own?
+        MOV     #8.,R3
+2$:     MOV     R4,R0
+        ADD     (R2)+,R0
+        MOVB    BOARD(R0),R1
+        BPL     4$
+        BIC     #^C<COWN>,R1
+        CMP     R1,R5
+        BNE     4$
+        SOB     R3,2$
+        MOV     R4,R0           ; suffocated
+        MOV     R0,SUFFC
+        CLRB    BOARD(R4)
+4$:     INC     R4
+        CMP     R4,#NCELLS
+        BLO     1$
+        JSR     PC,WINCHK
+9$:     RTS     PC
+SUFFC:  .WORD   0
 
 ; NEXTSL: the next unmoved unit of the player whose turn it is, scanning
 ; on from SEL round the board: in PHASE 0 a combat unit, in PHASE 1 a
@@ -465,8 +518,14 @@ VISADD: MOV     R1,-(SP)
         BNE     9$
         MOVB    BOARD(R0),R1
         BIC     #^C<CSTG>,R1
-        MOV     #1,R2           ; R2 = the radius
-        CMP     R1,#1
+        MOV     #1,R2           ; R2 = the radius: 2 for a fortification
+        BIT     #RSIGHT,RULES   ;   (under RSIGHT, for an infantry)
+        BEQ     11$
+        TST     R1
+        BNE     1$
+        MOV     #2,R2
+        BR      1$
+11$:    CMP     R1,#1
         BLO     1$
         CMP     R1,#2
         BHI     1$
@@ -589,6 +648,8 @@ AITURN: MOV     R0,AIOWN
 PREMOV: MOV     R0,PMSRC
         MOV     R1,PMDST
         CLR     PMSEEN
+        TST     FAST            ; the tests' fast play: nothing shown
+        BNE     9$
         CMP     MODE,#2
         BNE     1$
         TSTB    VISH(R0)
@@ -1523,6 +1584,8 @@ MDEMO:  .ASCIZ  /DEMO: SPACE TO PLAY, Q TO LEAVE/
         .EVEN
 MSG:    .WORD   MYOUR
 MODE:   .WORD   0               ; 0 the title, 1 the demo, 2 the game
+RULES:  .WORD   0               ; the rules under trial, see RCAPT..
+FAST:   .WORD   0               ; the tests' fast play: the computer's moves not shown
 DEMOKY: .WORD   0               ; SPACE or Q pressed at the title or in the demo
 VISP:   .WORD   VISH            ; the view of the player whose turn it is
 

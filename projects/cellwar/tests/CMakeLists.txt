@@ -14,6 +14,7 @@ add_executable(cellwar_tests
     test_rules.cpp
     test_ai.cpp
     test_title.cpp
+    test_sim.cpp
 )
 
 target_include_directories(cellwar_tests PRIVATE
