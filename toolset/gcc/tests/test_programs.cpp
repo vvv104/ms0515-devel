@@ -437,6 +437,14 @@ TEST_CASE("DRAW: ms_vfill, ms_fill, ms_blit, ms_text in the ROM's font, ms_vput,
             CHECK(cell(20 + i, 74 + r)[0] == left[i]);         /* three to the left */
             CHECK(cell(20 + i, 74 + r)[1] == left[i]);
         }
+    for (int r = 0; r < 4; ++r)                                 /* ms_put: the twelve words as 3 by 4 */
+        for (int i = 0; i < 3; ++i) {
+            CAPTURE(r); CAPTURE(i);
+            CHECK(cell(30 + i, 80 + r)[0] == r * 3 + i + 1);
+            CHECK(cell(30 + i, 80 + r)[1] == 0x10 + r * 3 + i);
+        }
+    CHECK(cell(33, 81)[0] == 0);
+    CHECK(cell(30, 84)[0] == 0);
     CHECK(cell(19, 71)[0] == 0);                                /* nothing spilt beside the boxes */
     CHECK(cell(26, 71)[0] == 0);
     CHECK(cell(26, 75)[0] == 0);

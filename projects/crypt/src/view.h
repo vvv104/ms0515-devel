@@ -10,12 +10,13 @@
  *
  * The party is on a cell facing one of the four ways, or part way
  * along a step: phase k of PLANE_PHASES past its cell's centre.  The
- * walls beside it never change their angle in a step, only the
- * texture runs along them, so they come drawn from the host
- * (art/planes.py, CRYPT.DAT) for every phase, and the view copies
- * their columns; the walls ahead are drawn by texture columns.  A turn
- * is the sector sliding past: the picture moved four columns a pass
- * and the columns coming in drawn - eight passes a quarter turn. */
+ * walls beside it never change their angle in a step, only the joints
+ * of their bricks run along them, so their outline and brick rows are
+ * composed once into a layer and copied each pass, the joints drawn
+ * over; the walls ahead grow as the party comes.  A turn is the
+ * sector sliding past: the picture moved four columns a pass and the
+ * columns coming in drawn - eight passes a quarter turn.  The tables
+ * are art/geometry.py's. */
 
 #ifndef CRYPT_VIEW_H
 #define CRYPT_VIEW_H
@@ -36,6 +37,10 @@ struct view {
 
 /* The window drawn for the view: standing, or part way along a step. */
 void view_render(const struct view *v);
+/* The view's layer forgotten: after the party moves without the view
+ * being drawn on the way (a step aside), the next render composes it
+ * whole. */
+void view_invalidate(void);
 /* A turn from the view's facing, dir 1 to the right or -1 to the left,
  * begun; then pass 1..TURN_PASSES each slides the picture on, the last
  * leaving the new facing's view. */

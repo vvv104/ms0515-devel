@@ -50,6 +50,7 @@ int main(void)
 	}
 	ms_hscroll(20, 25, 70, 72, 2);			/* 1 2 1 2 3 4 */
 	ms_hscroll(20, 25, 74, 76, -3);			/* 4 5 6 4 5 6 */
+	ms_put(30, 80, 3, 4, twelve);			/* the twelve words as a box of 3 by 4 */
 	ms_keys_begin();
 	while (ms_key() != MS_KEY_Q)
 		;

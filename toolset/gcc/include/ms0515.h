@@ -88,6 +88,11 @@ extern const unsigned char ms_reverse[256];
 /* Column c, rows y0..y1: the pixels under `mask` set from `pixels`, the
  * rest and the attribute left as they are. */
 void ms_vfill_masked(int c, int y0, int y1, unsigned char pixels, unsigned char mask);
+/* A box of words from memory - a word a cell, the attribute over the
+ * pixels, row after row, `cells` words a row, on an even address -
+ * put at cell column c, row y: a picture kept as the screen keeps it,
+ * drawn once and copied a pass. */
+void ms_put(int c, int y, int cells, int rows, const void *words);
 /* The box of cells c0..c1, rows y0..y1, moved `by` cells to the right
  * (to the left when by < 0); what moves past the box's edge is lost,
  * the cells uncovered keep what they had - a view turning. */

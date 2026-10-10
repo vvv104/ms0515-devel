@@ -10,7 +10,8 @@
 
 void ms_bank(int n, int extended)
 {
-	unsigned bit = 1u << n;
+	static const unsigned bits[7] = {1, 2, 4, 8, 16, 32, 64};	/* not 1 << n: the compiler's third trap */
+	unsigned bit = bits[n & 7];
 
 	if (extended)
 		ms_dispatcher_clear(bit);

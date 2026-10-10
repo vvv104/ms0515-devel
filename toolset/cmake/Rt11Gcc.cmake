@@ -59,6 +59,7 @@ function(_rt11_gcc_runtime)
         "${RT11_GCC_DIR}/machine/screen.c"
         "${RT11_GCC_DIR}/machine/tex.c"
         "${RT11_GCC_DIR}/machine/texrun.s"
+        "${RT11_GCC_DIR}/machine/vbox.s"
         "${RT11_GCC_DIR}/machine/vfill.s"
         "${RT11_GCC_DIR}/machine/vmask.s"
         "${RT11_GCC_DIR}/machine/vput.s")

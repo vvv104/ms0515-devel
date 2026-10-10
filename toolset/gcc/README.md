@@ -169,6 +169,15 @@ happened to sit two bytes up, and a store went two bytes astray.  The
 toolchain file compiles everything with `-fno-defer-pop`, which pops
 right after each call; a program compiled by hand needs the flag too.
 
+**A third trap, to be written round.**  A shift by a variable count
+(`0x80 >> i`, `1 << n`) comes out as a loop that counts the shift
+register down to zero - and the compiler goes on using that register
+as the variable afterwards, though the pattern says it is clobbered:
+`for (i = 0; i < 8; i++) bits |= 0x80 >> i` never ends, `i` being
+put back to zero by every shift.  Until the backend is fixed, shift by
+constants only, and take a variable bit from a table (`bitAt[i]`), as
+the machine library and CRYPT do.
+
 ## How fast
 
 The CALC benchmark of 2026-09-25 (primes below 10000 by trial division

@@ -8,24 +8,22 @@
  * sideways, the joystick the same; Q ends it, and on the way out the
  * program says how many passes it made in how many frames.
  *
- * The view is view.c, the rest of the screen hud.c, the dungeon map.c,
- * the walls drawn on the host data.c; the machine is the toolset's
- * ms0515.h. */
+ * The view is view.c, the rest of the screen hud.c, the dungeon map.c;
+ * the machine is the toolset's ms0515.h. */
 
 #include <ms0515.h>
 #include <rt11.h>
 #include "art.h"
-#include "data.h"
+#include "geometry.h"
 #include "hud.h"
 #include "map.h"
-#include "planes.h"
 #include "view.h"
 
 /* Frames a pass takes, by what the pass has to draw: a turn slides
  * the picture and draws four columns, a step draws all twenty-two. */
 #ifndef PACE
-#define TURN_PACE 3			/* 16 a second: a quarter turn in half a second */
-#define STEP_PACE 4			/* 12 a second: a step in two fifths */
+#define TURN_PACE 5			/* 10 a second: a quarter turn in four fifths of a second */
+#define STEP_PACE 5			/* 10 a second: a step in half a second */
 #define IDLE_PACE 2			/* standing: the keys looked at */
 #else
 #define TURN_PACE PACE			/* one pace for all, for measuring */
@@ -121,6 +119,7 @@ static void sidestep(int dir)
 	view.cellX = tx;
 	view.cellY = ty;
 	moved = 1;
+	view_invalidate();
 	mapped();
 }
 
@@ -232,10 +231,6 @@ int main(void)
 	int i;
 
 	map_test();
-	if (data_load() < 0) {
-		rt11_print("CRYPT.DAT is missing");
-		return 1;
-	}
 	view.cellX = map_startX;
 	view.cellY = map_startY;
 	view.facing = 0;

@@ -25,9 +25,8 @@ cd rt11_devel/projects/crypt/build/sav && ms0515-run CRYPT
 ```
 
 The compiler is `$MS0515_GCC/bin/pdp11-aout-gcc`, or on the PATH; the
-build needs Python with Pillow for the art.  On Windows the build runs
-in WSL and `ms0515-run.exe` from there.  `CRYPT.DAT` comes out beside
-the program and must stay beside it: the walls, drawn on the host.
+build needs Python with Pillow for the faces.  On Windows the build
+runs in WSL and `ms0515-run.exe` from there.
 
 ## The screen
 
@@ -56,60 +55,73 @@ turn a tap into the key - and the keys do the same meanwhile.
 The view is a cylinder round the party, not a flat picture: a pixel
 column looks one way for all its rows, a quarter of an angle unit
 (256 to the turn) from the next, so 32 cell columns make a quarter
-turn and the 22 of the view are the middle of them.  Two things
+turn and the 22 of the view are the middle of them.  A wall stands
+60 / r rows above and below the horizon at r cells.  Two things
 follow.  When the party steps along a corridor the walls beside it
-keep their angle - every pixel column keeps its height and its rows
-keep their texture row - and only the texture runs along them; so
-`art/planes.py` draws those walls on the host, pixel by pixel from the
-brick PNG, for each of the five phases of a step, and the machine
-copies their columns (`CRYPT.DAT`, loaded at the start into the bank
-above the program, both halves of it; `src/data.c`).  And a turn is
-the sector sliding past: the picture moved four columns a pass and the
-four coming in drawn, eight passes a quarter turn, nothing redrawn.
-The price is that horizontal lines bow a little towards the window's
-edges, as they do in a lens.
+keep their angle, every pixel column its height; only the joints of
+the bricks run along them.  And a turn is the sector sliding past:
+the picture moved four columns a pass and the four coming in drawn,
+eight passes a quarter turn, nothing redrawn.  The price is that
+horizontal lines bow a little towards the window's edges, as they do
+in a lens.
 
-`src/view.c` finds what each column shows: the cells about the party
-gone through front to back, each wall face taking the pixel columns
-not yet taken from a table of where every cell corner falls, a wall
-along the axis as one face however long; then it paints the columns,
-farthest piece first, the nearer ones over it under their pixel masks.
-A wall across the axis is drawn by texture columns (`tex.h`), a
-reduced texture for the distance.  The right-hand walls are the
-left-hand images mirrored, pixel by pixel, which halves the data.
-`src/map.c` is the test level, drawn as text; `src/hud.c` the screen
-round the view, with the map of the cells about the party, the
-party's arrow in the middle and the level sliding under it;
-`src/main.c` the loop: a step in five passes of four frames, a turn
-in eight of three.
+The walls are not pictures.  `art/geometry.py` makes the tables: for
+every pixel column of the sector, the height and the depth of the
+wall half a cell, one and a half and two and a half from the party's
+axis; where every cell corner falls at every phase of a step; where
+the edges of the floor's cells cross it.  From these `src/view.c`
+draws a brick wall as lines on a fill: its outline, three rows of
+mortar at the quarters of its height, and the joints between the
+bricks - half a cell long, a quarter tall, the rows laid by turns -
+where each falls at this phase.  The floor is green with the edges of
+its cells drawn over: along the axis, at every plane's foot, and
+across it, where each stands at this phase; the ceiling is black.
 
-The art is PNGs under `art/`, turned into C by `tools/mkart.py` at
+Each pass `src/view.c` finds what each column shows - the cells about
+the party gone through front to back, each wall face taking the pixel
+columns not yet taken, a wall along the axis as one face however long
+- and keeps in memory a layer of what does not move in a step: the
+walls along the axis, their outline and mortar, the floor and its
+lines along.  A column of the layer is composed again only when the
+walls in it change.  The layer is copied to the screen and what moves
+is drawn over it: the joints, the walls across the axis (which grow as
+the party comes), the floor's edges across.  `src/map.c` is the test
+level, drawn as text; `src/hud.c` the screen round the view, with the
+map of the cells about the party, the party's arrow in the middle and
+the level sliding under it; `src/main.c` the loop: a step in five
+passes, a turn in eight, a pass of either in five frames.
+
+The faces are PNGs under `art/`, turned into C by `tools/mkart.py` at
 build time; what is there now is drawn by `art/placeholders.py` and
-stands in until real pictures come.  The program must end under
-060000 (the build checks: `LIMIT`), since the bank above it holds the
-walls.
+stands in until real pictures come.
 
-What the machine does: a pass of a turn in 1.3 frames, a pass of a
-step in 3.2 - the paces leave a little room.  On its way out the
-program prints how many passes it made in how many frames, and how
-many of them drew the view in how many; a build with `-DPROF=1` finds
-the pieces and paints nothing, `-DPROF=2` paints without finding, for
-measuring the two apart.
+What the machine does: a pass of a turn in 4.0 frames, a pass of a
+step in 4.5 - ten a second, half a second a step, four fifths a
+quarter turn.  On its way out the program prints how many passes it
+made in how many frames, and how many of them drew the view in how
+many; a build with `-DPROF=1` finds the pieces and paints nothing,
+`-DPROF=2` paints without finding, `-DPROF=3` leaves out what moves,
+`-DPROF=4` the layer's copy, for measuring the parts; `-DPACE=n` sets
+one pace for everything.  The time goes, in C, to the joints (a
+pixel a row), the layer's copy, the finding and the floor's edges;
+the loops of those are the next thing to write in assembler.
 
-Not done yet: the floor's cell edges (lines in the first version, too
-dear a multiply at a time; a table will bring them back), steps to the
-side shown in parts, the planes farther than two and a half cells
-(a hall's far walls come out as a bar on the horizon).
+Not done yet: steps to the side shown in parts (they are instant);
+the planes farther than two and a half cells (a hall's far walls come
+out as a bar on the horizon); other kinds of wall than brick; and
+monsters, which will be sprites (`tex.h`) over the layer.
 
 ## Tests
 
 `crypt_tests` (`tests/`), built with the emulator's tests, runs
 `build/sav/CRYPT.SAV` on ms0515-run's machine: the screen with its
 walls, band, party and buttons; the left wall's top edge straight to
-the horizon, pixel by pixel, against the cylinder's own sum; a step
-that runs the texture and moves no wall; a turn that slides the
-picture four columns a pass, comes back exactly and comes round the
-four quarters exactly; a wall that will not be walked through; the
-paces held, with what a pass costs told.  `--crypt-sav=<folder>` names
-another build, and then a missing program is a failure (CI);
-`--crypt-png=<folder>` keeps what the tests saw as PNGs.
+the horizon, pixel by pixel, against the cylinder's own sum; the rows
+of mortar at the quarters of the wall, the joints between, the floor's
+edges; a step that runs the joints and moves no wall; a turn that
+slides the picture four columns a pass, comes back exactly and comes
+round the four quarters exactly; a wall that will not be walked
+through; the paces held, with what a pass costs told.
+`--crypt-sav=<folder>` names another build, and then a missing program
+is a failure (CI); `--crypt-png=<folder>` keeps what the tests saw as
+PNGs.

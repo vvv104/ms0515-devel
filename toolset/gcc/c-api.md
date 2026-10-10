@@ -138,6 +138,7 @@ down: a word each, the attribute over the pixels (`machine/draw.c`).
 | `void ms_vput_mirror(int c, int y0, int rows, const void *words)`, `ms_vput_mirror_masked(..., unsigned char mask)` | the same two with each word's pixels turned round, the leftmost rightmost: a column of the mirror image of what was drawn - a wall on the other side, a sprite facing the other way |
 | `const unsigned char ms_reverse[256]` | a byte's bits in the other order: `ms_reverse[0x80 >> i]` is `1 << i` |
 | `void ms_vfill_masked(int c, int y0, int y1, unsigned char pixels, unsigned char mask)` | column c, rows y0..y1: the pixels under `mask` set from `pixels`, the rest and the attribute left as they are |
+| `void ms_put(int c, int y, int cells, int rows, const void *words)` | a box of words from memory - a word a cell, the attribute over the pixels, row after row, `cells` words a row, on an even address - put at cell column c, row y: a picture kept as the screen keeps it, drawn once and copied a pass |
 | `void ms_hscroll(int c0, int c1, int y0, int y1, int by)` | the box of cells c0..c1, rows y0..y1, moved `by` cells to the right (left when by < 0); what moves past the box's edge is lost, the cells uncovered keep what they had - a view turning |
 | `struct ms_image { unsigned char cells, rows; const unsigned char *pixels, *attributes; }` | an image: its pixel bytes row by row, and its attributes the same way, or none (0) to leave the screen's |
 | `void ms_blit(const struct ms_image *image, int c, int y)` | the image put at cell column c, row y |

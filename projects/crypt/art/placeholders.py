@@ -1,7 +1,8 @@
-"""placeholders.py - the stand-in art of CRYPT, drawn by code: a red brick
-wall, a skeleton, four faces.  Nothing here is meant to last; a PNG of
-the same size dropped in its place goes through tools/mkart.py the same
-way.  Run it here: it writes the PNGs beside itself."""
+"""placeholders.py - the stand-in art of CRYPT, drawn by code: a
+skeleton, four faces.  Nothing here is meant to last; a PNG of the same
+size dropped in its place goes through tools/mkart.py the same way.
+Run it here: it writes the PNGs beside itself.  The walls are not
+pictures: view.c draws them from geometry.py's tables."""
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -11,24 +12,6 @@ BLACK, WHITE = (0, 0, 0), (255, 255, 255)
 RED, BRIGHT_RED = (170, 0, 0), (255, 0, 0)
 YELLOW, BRIGHT_YELLOW = (170, 170, 0), (255, 255, 0)
 BLUE, GREEN, CYAN, MAGENTA = (0, 0, 170), (0, 170, 0), (0, 170, 170), (170, 0, 170)
-
-
-def wall():
-    """128x32: four rows of bricks 32 wide and 8 high, the odd rows
-    shifted by half a brick, mortar a pixel wide; a texture of 16
-    columns of 8 pixels by 32 texels (tex.h).  Symmetrical left to
-    right - the lit edge along the top only - so that the wall on the
-    right of the view, the left's image mirrored, meets it without a
-    seam."""
-    im = Image.new("RGB", (128, 32), BLACK)
-    d = ImageDraw.Draw(im)
-    for row in range(4):
-        shift = 16 if row % 2 else 0
-        for x in range(-16, 128, 32):
-            x0, y0 = x + shift, row * 8
-            d.rectangle([x0, y0, x0 + 30, y0 + 6], fill=RED)
-            d.line([x0, y0, x0 + 30, y0], fill=BRIGHT_RED)      # the lit top edge
-    im.save(HERE / "wall.png")
 
 
 def skeleton():
@@ -65,7 +48,6 @@ def face(name, hair, background, skin):
 
 
 def main():
-    wall()
     skeleton()
     face("face1", BLACK, BLUE, BRIGHT_YELLOW)
     face("face2", RED, GREEN, YELLOW)

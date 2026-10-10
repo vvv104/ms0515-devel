@@ -72,7 +72,6 @@ public:
         fs::remove_all(dir_);
         fs::create_directories(dir_);
         fs::copy_file(savDir() / "CRYPT.SAV", dir_ / "CRYPT.SAV");
-        fs::copy_file(savDir() / "CRYPT.DAT", dir_ / "CRYPT.DAT");   /* the walls drawn on the host */
         REQUIRE(machine.start(dir_ / "CRYPT.SAV", {}));
     }
     ~Crawl()
