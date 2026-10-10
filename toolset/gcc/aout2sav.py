@@ -15,8 +15,12 @@ file's blocks to load, a bit a block from the top of byte 0360.
 
 The stack has its own room above the bss (--stack, 1024 bytes when not
 said): LINK's default, 01000 and down, is the vector area's few hundred
-bytes, too little for C.  --tools names the toolchain's prefix
-(pdp11-aout-) when its programs are not on the PATH."""
+bytes, too little for C.  --limit, an octal address, fails the build
+when the program and its stack reach it: a program that keeps the
+memory above for data it loads into the banks there (a bank switched to
+its extended half hides the primary half, so nothing of the program may
+lie in it).  --tools names the toolchain's prefix (pdp11-aout-) when its
+programs are not on the PATH."""
 import argparse
 import struct
 import subprocess
@@ -54,6 +58,8 @@ def main():
     ap.add_argument("sav", type=Path)
     ap.add_argument("--tools", default="pdp11-aout-", help="the toolchain's prefix")
     ap.add_argument("--stack", type=int, default=1024, help="the stack's bytes above the bss")
+    ap.add_argument("--limit", type=lambda s: int(s, 8), default=0,
+                    help="the first address, octal, the program and its stack must stay under")
     args = ap.parse_args()
 
     flat = args.sav.with_suffix(".bin")
@@ -65,6 +71,9 @@ def main():
     if end > ORIGIN + len(image):
         image += bytes(end - ORIGIN - len(image))
     stack = (ORIGIN + len(image) + args.stack + 1) & ~1
+    if args.limit and stack > args.limit:
+        raise SystemExit(f"{args.sav.name}: the program with its stack ends at {stack:o}, "
+                         f"past the limit {args.limit:o}, by {stack - args.limit} bytes")
     image += bytes(stack - ORIGIN - len(image))
     image += bytes(-len(image) % BLOCK)
     blocks = 1 + len(image) // BLOCK

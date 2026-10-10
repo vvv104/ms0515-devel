@@ -51,6 +51,7 @@ function(_rt11_gcc_runtime)
         "${RT11_GCC_DIR}/machine/clock.c"
         "${RT11_GCC_DIR}/machine/clock.s"
         "${RT11_GCC_DIR}/machine/draw.c"
+        "${RT11_GCC_DIR}/machine/hscroll.s"
         "${RT11_GCC_DIR}/machine/keys.c"
         "${RT11_GCC_DIR}/machine/keys.s"
         "${RT11_GCC_DIR}/machine/ports.c"
@@ -58,7 +59,9 @@ function(_rt11_gcc_runtime)
         "${RT11_GCC_DIR}/machine/screen.c"
         "${RT11_GCC_DIR}/machine/tex.c"
         "${RT11_GCC_DIR}/machine/texrun.s"
-        "${RT11_GCC_DIR}/machine/vfill.s")
+        "${RT11_GCC_DIR}/machine/vfill.s"
+        "${RT11_GCC_DIR}/machine/vmask.s"
+        "${RT11_GCC_DIR}/machine/vput.s")
     target_compile_options(rt11 PRIVATE -Wall -Wextra)
     target_include_directories(rt11 PUBLIC "${RT11_GCC_DIR}/include")
 endfunction()
@@ -85,14 +88,17 @@ function(rt11_c_library)
 endfunction()
 
 # rt11_c_program(NAME <NAME> SOURCES <file>... [LIBRARIES <name>...]
-#                [STACK <bytes>])
+#                [STACK <bytes>] [LIMIT <octal address>])
 #
 # The sources compiled and linked with the runtime, and with the
 # project's LIBRARIES (rt11_c_library), into NAME.SAV under <build
 # folder>/sav, with STACK bytes for the stack above the program (1024
-# when not said).  The a.out stays beside the objects for objdump.
+# when not said).  LIMIT fails the build when the program and its stack
+# reach that address: for a program that loads data into the banks
+# above itself (aout2sav.py says why).  The a.out stays beside the
+# objects for objdump.
 function(rt11_c_program)
-    cmake_parse_arguments(PARSE_ARGV 0 arg "" "NAME;STACK" "SOURCES;LIBRARIES")
+    cmake_parse_arguments(PARSE_ARGV 0 arg "" "NAME;STACK;LIMIT" "SOURCES;LIBRARIES")
     if(NOT arg_NAME OR NOT arg_SOURCES)
         message(FATAL_ERROR "rt11_c_program needs NAME and SOURCES")
     endif()
@@ -101,6 +107,10 @@ function(rt11_c_program)
     string(TOLOWER "${arg_NAME}" lower)
     if(NOT arg_STACK)
         set(arg_STACK 1024)
+    endif()
+    set(limit "")
+    if(arg_LIMIT)
+        set(limit --limit ${arg_LIMIT})
     endif()
     string(REGEX REPLACE "gcc(\\.exe)?$" "" prefix "${CMAKE_C_COMPILER}")
     set(sav_dir "${CMAKE_BINARY_DIR}/sav")
@@ -113,7 +123,7 @@ function(rt11_c_program)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${sav_dir}"
         COMMAND ${Python3_EXECUTABLE} "${RT11_GCC_DIR}/aout2sav.py"
                 "$<TARGET_FILE:${lower}>" "${sav}"
-                --tools "${prefix}" --stack ${arg_STACK}
+                --tools "${prefix}" --stack ${arg_STACK} ${limit}
         DEPENDS ${lower} "${RT11_GCC_DIR}/aout2sav.py"
         COMMENT "${arg_NAME}.SAV"
         VERBATIM)

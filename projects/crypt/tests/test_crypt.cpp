@@ -1,18 +1,33 @@
 /*
  * test_crypt.cpp - the crawl, seen from outside.
+ *
+ * The party begins at the west end of a corridor running east, a wall
+ * along its north side all the way: the view's left wall, half a cell
+ * from the party's axis.  On the cylinder the view is drawn on, that
+ * wall's top edge in pixel column x stands 120 sin|theta| rows above
+ * the horizon, theta the column's angle - the same sum the host drew
+ * it by, done again here from the geometry alone.
  */
 
 #include "Crawl.hpp"
 
+#include <cmath>
+#include <cstdint>
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 using namespace crypt;
 
 namespace {
 
-constexpr int kWarmUp = 200;     /* frames before the first key: the tables made, the screen up */
+constexpr int kWarmUp = 200;     /* frames before the first key: the data loaded, the screen up */
+constexpr int kTurnPace = 3;     /* frames a pass of a turn takes (main.c TURN_PACE) */
+constexpr int kStepPace = 4;     /* of a step (STEP_PACE) */
+constexpr int kIdlePace = 2;
+constexpr int kStepPasses = 5;   /* a step's phases (planes.py PHASES) */
+constexpr int kTurnPasses = 8;
 
 /* How many of the view's cells hold a lit pixel. */
 int lit(Crawl &crawl)
@@ -23,21 +38,70 @@ int lit(Crawl &crawl)
     return n;
 }
 
+/* Whether the pixel at view column x, window row r is not black. */
+bool coloured(Crawl &crawl, int x, int r)
+{
+    const uint8_t *cell = crawl.cell(x >> 3, kViewTop + r);
+    const bool ink = cell[0] & (0x80 >> (x & 7));
+    const int colour = ink ? cell[1] & 7 : (cell[1] >> 3) & 7;
+    return colour != 0;
+}
+
+/* The first window row of the pixel column that is not black, or -1. */
+int firstColoured(Crawl &crawl, int x)
+{
+    for (int r = 0; r < kViewRows; ++r)
+        if (coloured(crawl, x, r)) return r;
+    return -1;
+}
+
+/* Where the left wall's top edge should be in view pixel column x: a
+ * wall half a cell from the axis, drawn to 24 cells deep. */
+int wallTop(int x)
+{
+    const double pi = 3.14159265358979323846;
+    const double theta = (x + 40 + 0.5 - 128) * (pi / 2) / 256;      /* the view begins at sector pixel 40 */
+    if (theta >= 0) return -1;
+    if (0.5 / std::tan(-theta) > 24) return -1;
+    const double half = 120 * std::sin(-theta);
+    const int row = static_cast<int>(std::floor(59.5 - half)) + 1;
+    return row < 0 ? 0 : row;
+}
+
+/* The walls' outline by cells: for each cell column of the view, the
+ * first window row whose cell has a colour, ink or paper, and the last.
+ * Blind to the texture - its black lines move as the party steps -
+ * and so what a step must leave as it is. */
+std::vector<int> silhouette(Crawl &crawl)
+{
+    std::vector<int> rows;
+    for (int c = 0; c < kViewCells; ++c) {
+        int first = -1, last = -1;
+        for (int r = 0; r < kViewRows; ++r)
+            if (crawl.cell(c, kViewTop + r)[1] & 0x3F) { if (first < 0) first = r; last = r; }
+        rows.push_back(first);
+        rows.push_back(last);
+    }
+    return rows;
+}
+
 /* The program says on its way out how many passes of its loop it made
- * in how many frames. */
-std::pair<unsigned, unsigned> passesAndFrames(Crawl &crawl)
+ * in how many frames, and how many of them drew the view in how many. */
+struct Tally { unsigned passes, frames, drawn, drawnFrames; };
+
+Tally tally(Crawl &crawl)
 {
     crawl.tap('q');
     crawl.run(300);
     REQUIRE(crawl.machine.ended());
-    unsigned passes = 0, frames = 0;
+    Tally t{};
     const std::string printed = crawl.printed();
     MESSAGE(printed);
     std::istringstream line(printed);
-    std::string word, in, passesWord;
-    REQUIRE((line >> word >> passes >> passesWord >> in >> frames));
+    std::string word, in, passesWord, comma, drawnWord;
+    REQUIRE((line >> word >> t.passes >> passesWord >> in >> t.frames >> comma >> t.drawn >> drawnWord >> in >> t.drawnFrames));
     REQUIRE(word == "CRYPT:");
-    return {passes, frames};
+    return t;
 }
 
 }  // namespace
@@ -58,46 +122,154 @@ TEST_CASE("the screen: the view with walls, the band, the party, the buttons") {
     CHECK(crawl.cell(2, 150)[1] == 0x4E);               /* a button's yellow label on bright blue */
 }
 
-TEST_CASE("a step forward slides the walls over several passes, a turn swings them") {
+TEST_CASE("the left wall's top edge runs straight to the horizon, pixel by pixel") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
-    const auto still = crawl.view();                    /* the bricks: a step's parts show on them */
+    REQUIRE_FALSE(crawl.machine.ended());
+    /* The edge is where the sum says in every column but those where
+     * the texture's own black lines - the mortar between bricks, a
+     * pixel in thirty-two - run down from it; the wall never stands
+     * above the edge. */
+    int exact = 0;
+    std::ostringstream seen;
+    for (int x = 0; x < 80; ++x) {
+        const int expected = wallTop(x), got = firstColoured(crawl, x);
+        seen << x << ":" << got << "/" << expected << " ";
+        CAPTURE(x); CAPTURE(expected); CAPTURE(got);
+        REQUIRE(expected >= 0);
+        CHECK(got >= expected);
+        exact += got == expected;
+    }
+    MESSAGE("column: the first row seen / expected - " << seen.str());
+    CHECK(exact >= 72);
+}
+
+TEST_CASE("a step forward runs the texture along the walls and moves nothing else") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    crawl.png("start");
+    const auto still = crawl.view();
+    const auto outline = silhouette(crawl);
     crawl.run(10);
     CHECK(crawl.view() == still);                       /* nothing moves on its own */
 
+    /* The frames of the step, each kept when the screen stood still
+     * over a frame: the walls' outline never moves in a step, however
+     * the texture runs - but for the far end of the corridor, which
+     * comes nearer, in the middle columns. */
     crawl.tap(ms0515::Key::Up);
     int changes = 0;
     auto before = crawl.view();
-    for (int f = 0; f < 40; ++f) {
+    for (int f = 0; f < kStepPasses * kStepPace + 6; ++f) {
         crawl.run(1);
         auto now = crawl.view();
-        if (now != before) ++changes;
+        if (now == before) {
+            const auto seen = silhouette(crawl);
+            for (int c = 0; c < kViewCells; ++c) {
+                if (c >= 9 && c <= 12) continue;
+                CAPTURE(f); CAPTURE(c);
+                CHECK(seen[2 * c] == outline[2 * c]);
+                CHECK(seen[2 * c + 1] == outline[2 * c + 1]);
+            }
+        } else {
+            ++changes;
+            crawl.png("step" + std::to_string(f));
+        }
         before = std::move(now);
     }
-    CHECK(changes >= 4);                                /* shown in parts, not one jump */
-    CHECK(crawl.view() != still);
-    const auto stepped = crawl.view();
-
-    crawl.tap(ms0515::Key::Right);
-    changes = 0;
-    before = crawl.view();
-    for (int f = 0; f < 40; ++f) {
-        crawl.run(1);
-        auto now = crawl.view();
-        if (now != before) ++changes;
-        before = std::move(now);
-    }
-    CHECK(changes >= 4);
-    CHECK(crawl.view() != stepped);
-    /* The map: the party's arrow in the middle, a yellow cell among
-     * white ones, with walls lit round it. */
-    CHECK(crawl.cell(20, 168)[1] == 0x46);
+    CHECK(changes >= kStepPasses - 1);                  /* shown in parts, not one jump */
+    CHECK(crawl.view() != still);                       /* a cell on: the end of the corridor nearer */
+    CHECK(crawl.cell(20, 168)[1] == 0x46);              /* the map: the party's arrow, yellow */
     CHECK(crawl.cell(20, 168)[0] != 0);
-    CHECK(crawl.cell(14, 140)[1] == 0x07);
-    int walls = 0;
-    for (int y = 140; y < 196; ++y) for (int c = 14; c < 26; ++c) walls += crawl.cell(c, y)[0] != 0;
-    CHECK(walls > 40);
+}
+
+TEST_CASE("a turn slides the picture four columns a pass; four of them come round to the start") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    const auto start = crawl.view();
+    /* The frames of the turn, each kept when the screen stood still
+     * over a frame (a pass painted, the next not begun): a pass's
+     * picture is the one before moved four cells left, the four on the
+     * right new. */
+    crawl.tap(ms0515::Key::Right);
+    std::vector<std::vector<uint8_t>> frames;
+    auto last = crawl.view();
+    for (int f = 0; f < kTurnPasses * kTurnPace + 8; ++f) {
+        crawl.run(1);
+        auto now = crawl.view();
+        if (now == last && (frames.empty() || frames.back() != now)) {
+            frames.push_back(now);
+            crawl.png("turn" + std::to_string(frames.size()));
+        }
+        last = std::move(now);
+    }
+    MESSAGE("stable frames of the turn: " << frames.size());
+    CHECK(frames.size() >= 4);
+    /* Each kept frame is the one before moved left by four cells a
+     * pass - by eight or twelve when a pass went by between them. */
+    const auto slidBy = [&](const std::vector<uint8_t> &now, const std::vector<uint8_t> &before, int cells) {
+        for (int y = 0; y < kViewRows; ++y)
+            for (int c = 0; c < kViewCells - cells; ++c)
+                if (now[(y * kViewCells + c) * 2] != before[(y * kViewCells + c + cells) * 2] ||
+                    now[(y * kViewCells + c) * 2 + 1] != before[(y * kViewCells + c + cells) * 2 + 1])
+                    return false;
+        return true;
+    };
+    /* How many cells of the overlap differ when the frame before is
+     * moved by `cells`: 0 for a clean slide. */
+    const auto differing = [&](const std::vector<uint8_t> &now, const std::vector<uint8_t> &before, int cells) {
+        int n = 0;
+        for (int y = 0; y < kViewRows; ++y)
+            for (int c = 0; c < kViewCells - cells; ++c)
+                n += now[(y * kViewCells + c) * 2] != before[(y * kViewCells + c + cells) * 2] ||
+                     now[(y * kViewCells + c) * 2 + 1] != before[(y * kViewCells + c + cells) * 2 + 1];
+        return n;
+    };
+    int slides = 0;
+    for (std::size_t i = 1; i < frames.size(); ++i) {
+        CAPTURE(i);
+        bool slid = false;
+        for (int k = 4; k <= 20 && !slid; k += 4) slid = slidBy(frames[i], frames[i - 1], k);
+        if (!slid) {
+            std::ostringstream what;
+            for (int k = 0; k <= 20; k += 4) what << " by " << k << ": " << differing(frames[i], frames[i - 1], k);
+            MESSAGE("frame " << i << " against the one before, cells differing" << what.str());
+        }
+        CHECK(slid);
+        slides += slid;
+    }
+    CHECK(slides + 1 == static_cast<int>(frames.size()));
+    CHECK(crawl.view() != start);
+    const auto turned = crawl.view();
+
+    crawl.tap(ms0515::Key::Left);                       /* and back: the start again */
+    crawl.run(kTurnPasses * kTurnPace * 2);
+    {
+        const auto back = crawl.view();
+        std::ostringstream where;
+        int n = 0;
+        for (std::size_t i = 0; i < back.size(); i += 2)
+            if ((back[i] != start[i] || back[i + 1] != start[i + 1]) && n++ < 12) {
+                char cell[40];
+                std::snprintf(cell, sizeof cell, " c%dr%d:%02X/%02X>%02X/%02X", static_cast<int>((i / 2) % kViewCells),
+                              static_cast<int>((i / 2) / kViewCells), start[i], start[i + 1], back[i], back[i + 1]);
+                where << cell;
+            }
+        MESSAGE("back from the turn, cells differing from the start: " << n << where.str());
+    }
+    CHECK(crawl.view() == start);
+    crawl.tap(ms0515::Key::Right);
+    crawl.run(kTurnPasses * kTurnPace * 2);
+    CHECK(crawl.view() == turned);
+    for (int t = 0; t < 3; ++t) {                       /* three more quarters: round to the start */
+        crawl.tap(ms0515::Key::Right);
+        crawl.run(kTurnPasses * kTurnPace * 2);
+    }
+    MESSAGE("round the four quarters, cells differing from the start: " << differing(crawl.view(), start, 0));
+    CHECK(crawl.view() == start);
 }
 
 TEST_CASE("the walls do not let the party through") {
@@ -105,26 +277,41 @@ TEST_CASE("the walls do not let the party through") {
     Crawl crawl;
     crawl.run(kWarmUp);
     crawl.tap(ms0515::Key::Left);                       /* to face north: the wall of the ring */
-    crawl.run(40);
+    crawl.run(kTurnPasses * kTurnPace + 10);
     const auto facing = crawl.view();
     crawl.tap(ms0515::Key::Up);
-    crawl.run(40);
+    crawl.run(kStepPasses * kStepPace + 10);
     CHECK(crawl.view() == facing);
 }
 
-TEST_CASE("the pace: a pass every three frames, standing and moving") {
-    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+/* The pace held with the key down for `frames`: no pass shorter than
+ * the standing pace, and the passes that draw the view inside the
+ * move's own pace, taken together - what one costs is told. */
+void pace(ms0515::Key key, int frames, int movePace)
+{
     Crawl crawl;
     crawl.run(kWarmUp);
-    crawl.hold(ms0515::Key::Right, true);               /* turning round and round */
-    crawl.run(120);
-    crawl.hold(ms0515::Key::Right, false);
+    crawl.hold(key, true);
+    crawl.run(frames);
+    crawl.hold(key, false);
     crawl.run(20);
-    const auto [passes, frames] = passesAndFrames(crawl);
-    CHECK(frames >= 150);
-    CHECK(passes * 3 <= frames);
-    CHECK(passes * 30 >= frames * 9);
+    const Tally t = tally(crawl);
+    MESSAGE("a drawing pass: " << (t.drawn ? 10 * t.drawnFrames / t.drawn : 0) << " tenths of a frame, the pace " << movePace);
+    CHECK(t.frames >= static_cast<unsigned>(frames));
+    CHECK(t.passes * kIdlePace <= t.frames);
+    CHECK(t.drawn >= 20);
+    CHECK(t.drawnFrames < t.drawn * movePace);
     CHECK(crawl.machine.emulator().isHires());
+}
+
+TEST_CASE("the pace: a pass of a turn in three frames, turning round and round") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    pace(ms0515::Key::Right, 150, kTurnPace);
+}
+
+TEST_CASE("the pace: a pass of a step in four frames, walking the corridor") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    pace(ms0515::Key::Up, 150, kStepPace);
 }
 
 }

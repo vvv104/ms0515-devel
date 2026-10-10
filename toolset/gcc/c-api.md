@@ -133,6 +133,12 @@ down: a word each, the attribute over the pixels (`machine/draw.c`).
 |---|---|
 | `void ms_vfill(int c, int y0, int y1, unsigned char pixels, unsigned char attribute)` | column c, rows y0..y1 (both in): every word the pixels and the attribute - a raycaster's slice of wall, ceiling or floor |
 | `void ms_fill(int c0, int y0, int c1, int y1, unsigned char pixels, unsigned char attribute)` | cells c0..c1, rows y0..y1 (all in): a box |
+| `void ms_vput(int c, int y0, int rows, const void *words)` | column c from row y0 down: `rows` words from memory, a row each - a column drawn beforehand, as a wall's is on the host |
+| `void ms_vput_masked(int c, int y0, int rows, const void *words, unsigned char mask)` | the same into the pixels under `mask` only (bit 7 the leftmost), the attribute taken whole: where two surfaces share a cell |
+| `void ms_vput_mirror(int c, int y0, int rows, const void *words)`, `ms_vput_mirror_masked(..., unsigned char mask)` | the same two with each word's pixels turned round, the leftmost rightmost: a column of the mirror image of what was drawn - a wall on the other side, a sprite facing the other way |
+| `const unsigned char ms_reverse[256]` | a byte's bits in the other order: `ms_reverse[0x80 >> i]` is `1 << i` |
+| `void ms_vfill_masked(int c, int y0, int y1, unsigned char pixels, unsigned char mask)` | column c, rows y0..y1: the pixels under `mask` set from `pixels`, the rest and the attribute left as they are |
+| `void ms_hscroll(int c0, int c1, int y0, int y1, int by)` | the box of cells c0..c1, rows y0..y1, moved `by` cells to the right (left when by < 0); what moves past the box's edge is lost, the cells uncovered keep what they had - a view turning |
 | `struct ms_image { unsigned char cells, rows; const unsigned char *pixels, *attributes; }` | an image: its pixel bytes row by row, and its attributes the same way, or none (0) to leave the screen's |
 | `void ms_blit(const struct ms_image *image, int c, int y)` | the image put at cell column c, row y |
 | `void ms_text(int c, int y, const char *s, unsigned char attribute)` | text in the ROM's own font - KOI-8: ASCII and the Cyrillic 0300..0377, 8 rows high - from cell column c of row y, its cells given the attribute; a character the ROM has no glyph for is blank |
@@ -227,9 +233,10 @@ empty texels left unwritten.
 | `struct tex { unsigned char cols, rows; const unsigned char *texels; }` | a texture, column by column so that a column is a run of texels, and a texel a screen word: the pattern of eight pixels, then the ink and paper over it - `texels[cols][rows][2]`, a row one word moved (the loop is assembler: nine instructions a row); rows up to 255 |
 | `void tex_column(const struct tex *t, int col, int c, int y0, int y1)` | column `col` of the texture on screen column c, stretched over rows y0..y1 (both in); y0 may lie above the screen and y1 below it: the part off the screen is skipped, the stretch kept, as a wall nearer than the screen is tall does |
 | `void tex_column_in(const struct tex *t, int col, int c, int y0, int y1, int top, int bottom)` | the same cut to rows top..bottom instead of the screen's: a wall in a window that is not the whole screen |
+| `void tex_column_masked(const struct tex *t, int col, int c, int y0, int y1, int top, int bottom, unsigned char mask)` | the same into the pixels under `mask` only (bit 7 the leftmost), the attribute taken whole: a wall's edge that falls inside a cell |
 | `void tex_sprite_column(const struct tex *t, int col, int c, int y0, int y1)` | the same with the empty texels (a pattern of 0) left unwritten: a sprite's column, for a program that draws its sprites a column at a time against the depth of the wall there |
 | `void tex_sprite(const struct tex *t, int c, int y, int cells, int height)` | the texture as a sprite, `cells` wide and `height` rows high, its top left at cell column c and row y, its empty texels left unwritten; what lies off the screen is skipped |
-| `unsigned tex_step(int rows, int height)` | the texel step in 8.8 for `rows` texels over `height` rows: a table for the heights up to 255, remade when `rows` changes, a division past that |
+| `unsigned tex_step(int rows, int height)` | the texel step in 8.8 for `rows` texels over `height` rows: a table for the heights up to 255, made for the first texture's rows; a division for other rows or past 255 |
 
 ## fx.h - fixed point, cut to size
 

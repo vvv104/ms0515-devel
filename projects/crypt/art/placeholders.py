@@ -16,7 +16,10 @@ BLUE, GREEN, CYAN, MAGENTA = (0, 0, 170), (0, 170, 0), (0, 170, 170), (170, 0, 1
 def wall():
     """128x32: four rows of bricks 32 wide and 8 high, the odd rows
     shifted by half a brick, mortar a pixel wide; a texture of 16
-    columns of 8 pixels by 32 texels (tex.h)."""
+    columns of 8 pixels by 32 texels (tex.h).  Symmetrical left to
+    right - the lit edge along the top only - so that the wall on the
+    right of the view, the left's image mirrored, meets it without a
+    seam."""
     im = Image.new("RGB", (128, 32), BLACK)
     d = ImageDraw.Draw(im)
     for row in range(4):
@@ -25,7 +28,6 @@ def wall():
             x0, y0 = x + shift, row * 8
             d.rectangle([x0, y0, x0 + 30, y0 + 6], fill=RED)
             d.line([x0, y0, x0 + 30, y0], fill=BRIGHT_RED)      # the lit top edge
-            d.line([x0, y0, x0, y0 + 6], fill=BRIGHT_RED)
     im.save(HERE / "wall.png")
 
 

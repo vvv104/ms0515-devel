@@ -32,6 +32,10 @@ void tex_column(const struct tex *t, int col, int c, int y0, int y1);
  * window that is not the whole screen. */
 void tex_column_in(const struct tex *t, int col, int c, int y0, int y1, int top, int bottom);
 
+/* The same into the pixels under `mask` only (bit 7 the leftmost), the
+ * attribute taken whole: a wall's edge that falls inside a cell. */
+void tex_column_masked(const struct tex *t, int col, int c, int y0, int y1, int top, int bottom, unsigned char mask);
+
 /* The same with the empty texels - a pattern of 0 - left unwritten: a
  * sprite's column, for a program that draws its sprites a column at a
  * time against the depth of the wall there. */
@@ -43,8 +47,8 @@ void tex_sprite_column(const struct tex *t, int col, int c, int y0, int y1);
 void tex_sprite(const struct tex *t, int c, int y, int cells, int height);
 
 /* The texel step in 8.8 for `rows` texels over `height` rows: a table
- * for the heights up to 255, remade when `rows` changes, a division
- * past that. */
+ * for the heights up to 255, made for the first texture's rows; a
+ * division for other rows, or past 255. */
 unsigned tex_step(int rows, int height);
 
 #endif

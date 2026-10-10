@@ -4,11 +4,13 @@
  * row is the high byte of a sum that grows by the step - rows * 256 /
  * height in 8.8 - once a screen row.  The sum fits sixteen bits since
  * a texture has at most 255 rows.  The steps for the heights up to 255
- * come from a table made when the rows change (a wall's columns all
- * share their texture's rows); a taller column, nearer than the screen
- * is high, costs a division.  Where the run begins above its window,
- * the sum starts at the step times the rows skipped.  The rows
- * themselves are texrun.s: a word a row, nine instructions. */
+ * come from a table made for the first texture's rows (a wall's
+ * columns all share their texture's rows); a texture of other rows,
+ * or a taller column, nearer than the screen is high, costs a
+ * division - the table is 256 of them, too dear to remake as the
+ * textures alternate.  Where the run begins above its window, the sum
+ * starts at the step times the rows skipped.  The rows themselves are
+ * texrun.s: a word a row, nine instructions. */
 
 #include <ms0515.h>
 #include <tex.h>
@@ -25,13 +27,13 @@ unsigned tex_step(int rows, int height)
 
 	if (height <= 0)
 		return 0;
-	if (height > 255)
-		return (unsigned)(((unsigned long)rows << 8) / (unsigned)height);
-	if (rows != stepRows) {
+	if (stepRows == 0) {
 		stepRows = rows;
 		for (h = 1; h < 256; h++)
 			steps[h] = (unsigned)(((unsigned long)rows << 8) / (unsigned)h);
 	}
+	if (height > 255 || rows != stepRows)
+		return (unsigned)(((unsigned long)rows << 8) / (unsigned)height);
 	return steps[height];
 }
 
@@ -68,6 +70,26 @@ void tex_column_in(const struct tex *t, int col, int c, int y0, int y1, int top,
 void tex_column(const struct tex *t, int col, int c, int y0, int y1)
 {
 	tex_column_in(t, col, c, y0, y1, 0, MS_ROWS - 1);
+}
+
+/* A row at a time in C: a wall's edge takes a column or two a pass. */
+void tex_column_masked(const struct tex *t, int col, int c, int y0, int y1, int top, int bottom, unsigned char mask)
+{
+	unsigned step = tex_step(t->rows, y1 - y0 + 1);
+	const unsigned char *column, *texel;
+	unsigned char *p;
+	unsigned acc;
+	int n;
+
+	if (!clip(&y0, &y1, top, bottom, step, &acc))
+		return;
+	column = texels(t, col);
+	p = ms_row(y0) + (c << 1);
+	for (n = y1 - y0 + 1; n > 0; n--, p += MS_STRIDE, acc += step) {
+		texel = column + ((acc >> 8) << 1);
+		p[0] = (unsigned char)((p[0] & ~mask) | (texel[0] & mask));
+		p[1] = texel[1];
+	}
 }
 
 void tex_sprite_column(const struct tex *t, int col, int c, int y0, int y1)

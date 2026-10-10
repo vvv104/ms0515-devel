@@ -3,26 +3,35 @@
  * The party stands on a cell of the dungeon facing one of the four
  * ways, as in Eye of the Beholder; a step takes it to the next cell
  * and a turn a quarter round, but shown in parts, pass by pass, so the
- * walls slide and swing instead of jumping.  The keys: Up and Down step
- * forward and back, Left and Right turn, Z and X step sideways, the
- * joystick the same; T draws the walls with their texture or flat; Q
- * ends it, and on the way out the program says how many passes it made
- * in how many frames.
+ * walls run past and swing round instead of jumping.  The keys: Up and
+ * Down step forward and back, Left and Right turn, Z and X step
+ * sideways, the joystick the same; Q ends it, and on the way out the
+ * program says how many passes it made in how many frames.
  *
- * The view is view.c, the rest of the screen hud.c, the dungeon map.c;
- * the machine is the toolset's ms0515.h. */
+ * The view is view.c, the rest of the screen hud.c, the dungeon map.c,
+ * the walls drawn on the host data.c; the machine is the toolset's
+ * ms0515.h. */
 
 #include <ms0515.h>
-#include <stdio.h>
+#include <rt11.h>
 #include "art.h"
+#include "data.h"
 #include "hud.h"
 #include "map.h"
+#include "planes.h"
 #include "view.h"
 
+/* Frames a pass takes, by what the pass has to draw: a turn slides
+ * the picture and draws four columns, a step draws all twenty-two. */
 #ifndef PACE
-#define PACE 3				/* frames a pass takes: 16 a second, what the bricks allow */
+#define TURN_PACE 3			/* 16 a second: a quarter turn in half a second */
+#define STEP_PACE 4			/* 12 a second: a step in two fifths */
+#define IDLE_PACE 2			/* standing: the keys looked at */
+#else
+#define TURN_PACE PACE			/* one pace for all, for measuring */
+#define STEP_PACE PACE
+#define IDLE_PACE PACE
 #endif
-#define MOVE_PASSES 6			/* passes a step or a turn is shown in: a third of a second */
 
 enum { kForward, kBack, kLeft, kRight, kSideLeft, kSideRight, kKeys };
 
@@ -34,63 +43,135 @@ static const struct hero heroes[4] = {
 	{"ARNO", &face1, 42, 42, 0, 0}, {"OTTO", &face2, 32, 32, 5, 10},
 	{"ELSA", &face3, 18, 18, 20, 20}, {"VERA", &face4, 30, 30, 12, 12},
 };
-#ifndef TEXTURED
-#define TEXTURED 1			/* the walls with their bricks; T switches to flat */
-#endif
-static struct view view = {0, 0, 0, TEXTURED};
-static int left, dx, dy, dAngle;	/* the move in progress: passes left and a pass's share */
+static struct view view;
+static int stepping;			/* +1 forward, -1 back: the phase moves that way */
+static int turning;			/* the pass of a turn, 1..TURN_PASSES, 0 for none */
+static int turnDir;
+static int moved;			/* the party on another cell at once: the view to draw */
+static int pace = IDLE_PACE;		/* frames the pass in hand takes */
 static unsigned passes;
+static unsigned drawn, drawnFrames;	/* the passes that drew the view, and the frames they took */
 
-/* The way the party faces, as a unit step in cells: 0 east, 64 south. */
-static void facing(int angle, int *ux, int *uy)
+static void draw(void)
 {
-	switch ((angle >> 6) & 3) {
-	case 0: *ux = 1; *uy = 0; break;
-	case 1: *ux = 0; *uy = 1; break;
-	case 2: *ux = -1; *uy = 0; break;
-	default: *ux = 0; *uy = -1; break;
+	unsigned from = ms_frames;
+
+	view_render(&view);
+	drawn++;
+	drawnFrames += ms_frames - from;
+}
+
+static void slide(int pass)
+{
+	unsigned from = ms_frames;
+
+	view_turn_pass(pass);
+	drawn++;
+	drawnFrames += ms_frames - from;
+}
+
+/* The way the party faces, as a unit step in cells: 0 east, 1 south. */
+static void facing(int f, int *ux, int *uy)
+{
+	static const signed char dx[4] = {1, 0, -1, 0}, dy[4] = {0, 1, 0, -1};
+
+	*ux = dx[f & 3];
+	*uy = dy[f & 3];
+}
+
+static void mapped(void)
+{
+	hud_map(view.cellX, view.cellY, view.facing << 6);
+}
+
+/* A step forward or back begun, if the cell there is floor: forward
+ * the phases run up from the party's cell, back they run down from
+ * the cell behind, which the party is then on. */
+static void step(int dir)
+{
+	int ux, uy, tx, ty;
+
+	facing(view.facing, &ux, &uy);
+	tx = view.cellX + dir * ux;
+	ty = view.cellY + dir * uy;
+	if (map_at(tx, ty))
+		return;
+	stepping = dir;
+	pace = STEP_PACE;
+	if (dir > 0) {
+		view.phase = 1;
+	} else {
+		view.cellX = tx;
+		view.cellY = ty;
+		view.phase = PLANE_PHASES - 1;
+		mapped();
 	}
 }
 
-/* A step of (ux, uy) cells begun, if the cell there is floor. */
-static void step(int ux, int uy)
+/* A step to the side, at once. */
+static void sidestep(int dir)
 {
-	int tx = (view.x >> 8) + ux, ty = (view.y >> 8) + uy;
+	int ux, uy, tx, ty;
 
+	facing(view.facing + dir, &ux, &uy);
+	tx = view.cellX + ux;
+	ty = view.cellY + uy;
 	if (map_at(tx, ty))
 		return;
-	left = MOVE_PASSES;
-	dx = ux * (CELL / MOVE_PASSES);
-	dy = uy * (CELL / MOVE_PASSES);
-	dAngle = 0;
+	view.cellX = tx;
+	view.cellY = ty;
+	moved = 1;
+	mapped();
 }
 
-static void turn(int quarter)
+static void turn(int dir)
 {
-	left = MOVE_PASSES;
-	dx = dy = 0;
-	dAngle = quarter * (64 / MOVE_PASSES);
+	turning = 1;
+	turnDir = dir;
+	pace = TURN_PACE;
+	view_turn_begin(&view, dir);
 }
 
 /* What the keys and the joystick ask, once the last move is over. */
 static void command(void)
 {
 	unsigned joy = ms_joystick();
-	int ux, uy;
 
-	facing(view.angle, &ux, &uy);
 	if (ms_is_held(keys[kForward]) || (joy & MS_JOY_UP))
-		step(ux, uy);
+		step(1);
 	else if (ms_is_held(keys[kBack]) || (joy & MS_JOY_DOWN))
-		step(-ux, -uy);
+		step(-1);
 	else if (ms_is_held(keys[kLeft]) || (joy & MS_JOY_LEFT))
 		turn(-1);
 	else if (ms_is_held(keys[kRight]) || (joy & MS_JOY_RIGHT))
 		turn(1);
 	else if (ms_is_held(keys[kSideLeft]))
-		step(uy, -ux);
+		sidestep(-1);
 	else if (ms_is_held(keys[kSideRight]))
-		step(-uy, ux);
+		sidestep(1);
+}
+
+/* A step's phase advanced: the last phase forward lands on the next
+ * cell, the last one back on the cell's centre. */
+static void stepOn(void)
+{
+	int ux, uy;
+
+	if (stepping > 0) {
+		if (++view.phase == PLANE_PHASES) {
+			facing(view.facing, &ux, &uy);
+			view.cellX += ux;
+			view.cellY += uy;
+			view.phase = 0;
+			stepping = 0;
+			mapped();
+		}
+	} else {
+		if (--view.phase == 0)
+			stepping = 0;
+	}
+	if (!stepping)
+		pace = IDLE_PACE;
 }
 
 /* A pass: the keys read, the move advanced or a new one begun, the view
@@ -99,30 +180,50 @@ static int pass(void)
 {
 	int c;
 
-	for (c = 0; c < PACE; c++)		/* the hold timers count frames, a pass is PACE of them */
+	for (c = 0; c < pace; c++)		/* the hold timers count frames, a pass is `pace` of them */
 		ms_held_tick(keys, kKeys);
 	while ((c = ms_key()) >= 0) {
 		if (c == MS_KEY_Q)
 			return 0;
-		if (c == MS_KEY_T)
-			view.textured = !view.textured;
 		ms_held_code(keys, kKeys, c);
 	}
-	if (left > 0) {
-		view.x += dx;
-		view.y += dy;
-		view.angle = (view.angle + dAngle) & 255;
-		if (--left == 0) {
-			view.x = (view.x & ~255) | (CELL / 2);	/* squarely on the cell */
-			view.y = (view.y & ~255) | (CELL / 2);
-			view.angle = (view.angle + 32) & ~63;	/* and squarely facing */
-			hud_map(view.x >> 8, view.y >> 8, view.angle);
+	if (turning) {
+		slide(turning);
+		if (++turning > TURN_PASSES) {
+			turning = 0;
+			pace = IDLE_PACE;
+			view.facing = (view.facing + turnDir) & 3;
+			mapped();
 		}
-	} else {
-		command();
+		return 1;
 	}
-	view_render(&view);
+	if (stepping) {
+		stepOn();
+		draw();
+		return 1;
+	}
+	command();
+	if (turning)				/* begun just now: its first pass */
+		slide(turning++);
+	else if (stepping || moved)		/* begun just now, or a step aside */
+		draw();
+	moved = 0;
 	return 1;
+}
+
+/* A number in decimal on the console: printf is a fifth of the room
+ * the program has. */
+static void sayNumber(unsigned n)
+{
+	char digits[6];
+	int i = 6;
+
+	digits[--i] = '\200';			/* the string's end without a new line */
+	do {
+		digits[--i] = (char)('0' + n % 10);
+		n /= 10;
+	} while (n && i > 0);
+	rt11_print(digits + i);
 }
 
 int main(void)
@@ -131,9 +232,14 @@ int main(void)
 	int i;
 
 	map_test();
-	view.x = map_startX * CELL + CELL / 2;
-	view.y = map_startY * CELL + CELL / 2;
-	view_init();
+	if (data_load() < 0) {
+		rt11_print("CRYPT.DAT is missing");
+		return 1;
+	}
+	view.cellX = map_startX;
+	view.cellY = map_startY;
+	view.facing = 0;
+	view.phase = 0;
 	ms_screen_begin(0);
 	ms_clock_begin();
 	ms_keys_begin();
@@ -142,10 +248,11 @@ int main(void)
 	hud_message("THE AIR IS COLD AND STILL.");
 	for (i = 0; i < 4; i++)
 		hud_hero(i, &heroes[i]);
-	hud_map(view.x >> 8, view.y >> 8, view.angle);
+	mapped();
+	view_render(&view);
 	started = last = ms_frames;
 	do {
-		while (ms_frames - last < PACE)
+		while (ms_frames - last < (unsigned)pace)
 			;
 		last = ms_frames;
 		passes++;
@@ -153,8 +260,17 @@ int main(void)
 	ms_keys_end();
 	ms_clock_end();
 	ms_screen_end();
-	/* How the machine kept up: the frames of the loop alone, the tables
-	 * and the screen's making before it left out. */
-	printf("CRYPT: %u passes in %u frames\n", passes, ms_frames - started);
+	/* How the machine kept up: the frames of the loop alone, the data's
+	 * loading and the screen's making before it left out; then the
+	 * passes that drew the view and the frames they took, to a frame. */
+	rt11_print("CRYPT: \200");
+	sayNumber(passes);
+	rt11_print(" passes in \200");
+	sayNumber(ms_frames - started);
+	rt11_print(" frames, \200");
+	sayNumber(drawn);
+	rt11_print(" drawn in \200");
+	sayNumber(drawnFrames);
+	rt11_print("");
 	return 0;
 }

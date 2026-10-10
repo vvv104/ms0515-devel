@@ -7,7 +7,8 @@
  * words, the pixel byte under the attribute byte.  The folder is the
  * project's build/sav unless --crypt-sav=<folder> names another, and
  * then a missing program is a failure; the suite skips itself when the
- * default folder has none.
+ * default folder has none.  With --crypt-png=<folder> the tests keep
+ * what they saw as PNGs there, for looking at.
  */
 #pragma once
 
@@ -19,6 +20,7 @@
 
 #include <ms0515/Emulator.hpp>
 #include <ms0515/Typist.hpp>
+#include <ms0515/app/Screen.hpp>
 
 extern "C" {
 #include <ms0515/core/board.h>
@@ -70,6 +72,7 @@ public:
         fs::remove_all(dir_);
         fs::create_directories(dir_);
         fs::copy_file(savDir() / "CRYPT.SAV", dir_ / "CRYPT.SAV");
+        fs::copy_file(savDir() / "CRYPT.DAT", dir_ / "CRYPT.DAT");   /* the walls drawn on the host */
         REQUIRE(machine.start(dir_ / "CRYPT.SAV", {}));
     }
     ~Crawl()
@@ -100,6 +103,17 @@ public:
             drained_ = true;
         }
         return printed_;
+    }
+
+    /* The screen kept as <name>.png in the --crypt-png folder, when one
+     * was named; nothing otherwise. */
+    void png(const std::string &name)
+    {
+        auto it = options().find("png");
+        if (it == options().end() || it->second.empty()) return;
+        ms0515::app::Screen screen;
+        screen.render(machine.emulator(), 0);
+        ms0515::app::saveScreenshot(screen, (fs::path(it->second) / (name + ".png")).string());
     }
 
     const uint8_t *vram() { return board_get_vram(&ms0515::internal::board(machine.emulator())); }

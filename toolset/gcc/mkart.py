@@ -1,6 +1,6 @@
 """mkart.py - a PNG as the C of a texture or an image for the MS 0515.
 
-    mkart.py tex   NAME IN.png OUT.c [--key R,G,B]
+    mkart.py tex   NAME IN.png OUT.c [--key R,G,B] [--shrink N]
     mkart.py image NAME IN.png OUT.c
 
 The screen has eight colours, bright or not, two to a cell of 8x1
@@ -15,9 +15,12 @@ drawn scaled: the PNG's width a multiple of 8, its height up to 255,
 written column by column - `const struct tex NAME`.  With --key the
 colour given is transparent: a cell of it alone has no pixels, which
 tex_sprite leaves unwritten, and the rest of such a cell is paper
-black.  An `image` (ms0515.h) is drawn as it is by ms_blit, written
-row by row - `const struct ms_image NAME`.  The C declares nothing but
-the object; a header of the project's own says `extern`."""
+black.  With --shrink the PNG is reduced N times each way first, each
+texel the mean of its pixels: a texture for the distance, where the
+full one would lose its lines between the columns drawn.  An `image`
+(ms0515.h) is drawn as it is by ms_blit, written row by row - `const
+struct ms_image NAME`.  The C declares nothing but the object; a header
+of the project's own says `extern`."""
 import argparse
 import sys
 from pathlib import Path
@@ -77,8 +80,10 @@ def cell(pixels, key):
     return pattern, attribute
 
 
-def convert(path, key):
+def convert(path, key, shrink=1):
     im = Image.open(path).convert("RGB")
+    if shrink > 1:
+        im = im.resize((im.width // shrink, im.height // shrink), Image.BOX)
     w, h = im.size
     if w % 8 or h > 255:
         raise SystemExit(f"{path}: the width must be a multiple of 8 and the height up to 255")
@@ -110,9 +115,10 @@ def main():
     ap.add_argument("png", type=Path)
     ap.add_argument("out", type=Path)
     ap.add_argument("--key", help="the transparent colour, R,G,B (tex only)")
+    ap.add_argument("--shrink", type=int, default=1, help="the PNG reduced N times each way first (tex only)")
     args = ap.parse_args()
     key = tuple(int(v) for v in args.key.split(",")) if args.key else None
-    cells, height, patterns, attributes = convert(args.png, key)
+    cells, height, patterns, attributes = convert(args.png, key, args.shrink if args.kind == "tex" else 1)
     if args.kind == "tex":
         texels = []
         for c in range(cells):

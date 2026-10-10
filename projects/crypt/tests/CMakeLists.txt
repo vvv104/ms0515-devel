@@ -37,6 +37,7 @@ target_link_libraries(crypt_tests
     PRIVATE
         ms0515_run_core
         ms0515_disk          # EmulatorInternal.hpp reaches the disk lib's headers
+        ms0515_libapp        # the screen as a PNG, for looking at what a test saw
         doctest::doctest
 )
 

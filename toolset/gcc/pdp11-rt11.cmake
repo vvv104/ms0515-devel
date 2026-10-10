@@ -23,7 +23,11 @@ set(CMAKE_C_COMPILER "${PDP11_GCC}")
 set(CMAKE_ASM_COMPILER "${PDP11_GCC}")
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
-set(CMAKE_C_FLAGS_INIT "-m10 -ffreestanding")
+# -fno-defer-pop: the backend's second trap (README.md).  Left to defer
+# the popping of a call's arguments, it goes on addressing the locals
+# from the stack pointer by their old offsets while the arguments still
+# lie on top of them - and reads and writes the wrong words.
+set(CMAKE_C_FLAGS_INIT "-m10 -ffreestanding -fno-defer-pop")
 set(CMAKE_ASM_FLAGS_INIT "-m10")
 # -O2 is the level the benchmark picked: -O3 unrolls and loses, -Os and -O1
 # come out slower too (README.md).  Set in the cache, ahead of CMake's own

@@ -36,6 +36,8 @@ int main(void)
 	tex_column(&wall, 0, 6, 180, 219);	/* 40 rows, the last twenty below it */
 	tex_column(&wall, 0, 7, 100, 399);	/* 300 rows: past the table */
 	tex_column_in(&wall, 2, 8, 100, 139, 110, 129);	/* 40 rows, the window rows 110..129 */
+	ms_fill(9, 100, 9, 119, 0xF0, MS_INK(3));
+	tex_column_masked(&wall, 1, 9, 100, 119, 105, 115, 0x0F);	/* the right half, rows 105..115 */
 	ms_fill(10, 100, 15, 111, 0x11, MS_INK(7));
 	tex_sprite(&sprite, 10, 100, 6, 12);	/* three times its size, over the box */
 	tex_sprite(&sprite, 38, 150, 4, 8);	/* two of its four cells past the edge */

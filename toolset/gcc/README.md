@@ -159,6 +159,16 @@ when speed is wanted (`-O2`), and keeps the loop from 4 under `-Os`.
 `-m10` also means the PDP-11/10, which had no `XOR` and no `SOB`; the
 T-11 has both, and GCC asks for a `__xorhi3` instead (in `rt/arith.s`).
 
+**A second trap, kept off by a flag.**  GCC pops a call's arguments
+off the stack lazily by default (`-fdefer-pop`): several calls' worth
+at once, later.  The pdp11 backend addresses a function's locals from
+the stack pointer, and between the call and the pop it goes on using
+their old offsets while the arguments still lie on top of them - a
+local read after `data_select(p->slot)` came back as whatever word
+happened to sit two bytes up, and a store went two bytes astray.  The
+toolchain file compiles everything with `-fno-defer-pop`, which pops
+right after each call; a program compiled by hand needs the flag too.
+
 ## How fast
 
 The CALC benchmark of 2026-09-25 (primes below 10000 by trial division

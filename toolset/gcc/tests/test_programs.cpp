@@ -343,7 +343,7 @@ TEST_CASE("PORTS: the joystick, the border, the speaker and the banks") {
  * cell by cell; the glyphs compared with the font found in the ROM the
  * machine carries, by the shape of '0' and of the Cyrillic A as the
  * library finds them. */
-TEST_CASE("DRAW: ms_vfill, ms_fill, ms_blit and ms_text in the ROM's font") {
+TEST_CASE("DRAW: ms_vfill, ms_fill, ms_blit, ms_text in the ROM's font, ms_vput, the masked ones, ms_hscroll") {
     if (!built("DRAW")) { MESSAGE("DRAW.SAV not built - skipped"); return; }
     Driven d("DRAW");
     d.run(80);
@@ -402,6 +402,46 @@ TEST_CASE("DRAW: ms_vfill, ms_fill, ms_blit and ms_text in the ROM's font") {
     for (int r = 0; r < 8; ++r) lit += cell(0, 100 + r)[0] != 0;
     CHECK(lit >= 5);
 
+    const uint8_t column[8] = {0x0F, 0x12, 0xF0, 0x34, 0x55, 0x56, 0xAA, 0x78};
+    for (int r = 0; r < 4; ++r) {
+        CAPTURE(r);
+        CHECK(cell(30, 10 + r)[0] == column[2 * r]);            /* ms_vput: the words as they are */
+        CHECK(cell(30, 10 + r)[1] == column[2 * r + 1]);
+        CHECK(cell(31, 10 + r)[0] == (0xF0 | (column[2 * r] & 0x0F)));   /* masked over 0xFF */
+        CHECK(cell(31, 10 + r)[1] == column[2 * r + 1]);
+        CHECK(cell(32, 10 + r)[0] == 0x30);                     /* ms_vfill_masked: the left half */
+        CHECK(cell(32, 10 + r)[1] == 0x07);                     /* the attribute untouched */
+        uint8_t mirrored = 0;
+        for (int b = 0; b < 8; ++b) if (column[2 * r] & (0x80 >> b)) mirrored |= 1 << b;
+        CHECK(cell(33, 10 + r)[0] == mirrored);                 /* ms_vput_mirror */
+        CHECK(cell(33, 10 + r)[1] == column[2 * r + 1]);
+        CHECK(cell(34, 10 + r)[0] == (0x0F | (mirrored & 0xF0)));   /* masked, over 0xFF */
+        CHECK(cell(34, 10 + r)[1] == column[2 * r + 1]);
+    }
+    CHECK(cell(30, 9)[0] == 0);
+    CHECK(cell(30, 14)[0] == 0);
+    for (int r = 0; r < 12; ++r) {                              /* ms_vput over eight rows and more, from low memory and from bank 3 */
+        CAPTURE(r);
+        CHECK(cell(35, 10 + r)[0] == r + 1);
+        CHECK(cell(35, 10 + r)[1] == 0x10 + r);
+        CHECK(cell(36, 10 + r)[0] == r + 1);
+        CHECK(cell(36, 10 + r)[1] == 0x10 + r);
+    }
+    CHECK(cell(35, 22)[0] == 0);
+    const uint8_t right[6] = {1, 2, 1, 2, 3, 4}, left[6] = {4, 5, 6, 4, 5, 6};
+    for (int i = 0; i < 6; ++i)
+        for (int r = 0; r < 3; ++r) {
+            CAPTURE(i); CAPTURE(r);
+            CHECK(cell(20 + i, 70 + r)[0] == right[i]);        /* scrolled two to the right */
+            CHECK(cell(20 + i, 70 + r)[1] == right[i]);
+            CHECK(cell(20 + i, 74 + r)[0] == left[i]);         /* three to the left */
+            CHECK(cell(20 + i, 74 + r)[1] == left[i]);
+        }
+    CHECK(cell(19, 71)[0] == 0);                                /* nothing spilt beside the boxes */
+    CHECK(cell(26, 71)[0] == 0);
+    CHECK(cell(26, 75)[0] == 0);
+    CHECK(cell(20, 73)[0] == 0);
+
     d.typist.type('q');
     d.finish();
     CHECK(d.machine.emulator().isHires());
@@ -459,6 +499,16 @@ TEST_CASE("TEX: tex_column and tex_sprite against the host's own stretching") {
     column(wallPixels, wallAttributes, 8, 0, 6, 180, 219, false);
     column(wallPixels, wallAttributes, 8, 0, 7, 100, 399, false);
     column(wallPixels, wallAttributes, 8, 2, 8, 100, 139, false, 110, 129);
+    for (int y = 100; y <= 119; ++y) { cell(9, y)[0] = 0xF0; cell(9, y)[1] = 0x03; }
+    {                                                   /* tex_column_masked: a texel a row, the masked pixels */
+        const unsigned step = (8u << 8) / 20u;
+        unsigned acc = step * 5;                        /* rows 100..104 cut off */
+        for (int y = 105; y <= 115; ++y, acc += step) {
+            const unsigned i = acc >> 8;
+            cell(9, y)[0] = static_cast<uint8_t>(0xF0 | (wallPixels[8 + i] & 0x0F));
+            cell(9, y)[1] = wallAttributes[8 + i];
+        }
+    }
     for (int y = 100; y <= 111; ++y)
         for (int c = 10; c <= 15; ++c) { cell(c, y)[0] = 0x11; cell(c, y)[1] = 0x07; }
     const auto sprite = [&](int c, int y, int cells, int height) {

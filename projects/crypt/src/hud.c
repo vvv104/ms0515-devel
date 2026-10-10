@@ -67,10 +67,25 @@ static const unsigned char arrows[4][4] = {
 	{0x8, 0xC, 0xE, 0xC}, {0x6, 0x6, 0xF, 0x6}, {0x1, 0x3, 0x7, 0x3}, {0x6, 0xF, 0x6, 0x6},
 };
 
-/* A wall of the level on the map; nothing past the level's edge. */
-static int wallAt(int x, int y)
+/* A row of the map's cells as bytes, two cells a byte, a nibble each:
+ * the level's row my from column mx on, nothing past the level's edge.
+ * Straight off the level, since the map is drawn whole at every step. */
+static void mapRow(int mx, int my, unsigned char *bytes)
 {
-	return x >= 0 && y >= 0 && x < MAP_SIDE && y < MAP_SIDE && map_at(x, y);
+	const unsigned char *cell = map + (my << 5) + mx;
+	int q;
+
+	for (q = 0; q < MAP_ACROSS / 2; q++, cell += 2, mx += 2) {
+		unsigned char b = 0;
+
+		if (my >= 0 && my < MAP_SIDE) {
+			if (mx >= 0 && mx < MAP_SIDE && cell[0])
+				b = 0xF0;
+			if (mx + 1 >= 0 && mx + 1 < MAP_SIDE && cell[1])
+				b |= 0x0F;
+		}
+		bytes[q] = b;
+	}
 }
 
 void hud_map(int cellX, int cellY, int angle)
@@ -78,14 +93,10 @@ void hud_map(int cellX, int cellY, int angle)
 	const unsigned char *arrow = arrows[((angle + 32) >> 6) & 3];
 	unsigned char bytes[MAP_ACROSS / 2];
 	unsigned char *p;
-	int r, q, i, my, mx;
+	int r, q, i;
 
 	for (r = 0; r < MAP_DOWN; r++) {
-		my = cellY - MAP_DOWN / 2 + r;
-		for (q = 0; q < MAP_ACROSS; q += 2) {
-			mx = cellX - MAP_ACROSS / 2 + q;
-			bytes[q >> 1] = (unsigned char)((wallAt(mx, my) ? 0xF0 : 0) | (wallAt(mx + 1, my) ? 0x0F : 0));
-		}
+		mapRow(cellX - MAP_ACROSS / 2, cellY - MAP_DOWN / 2 + r, bytes);
 		for (i = 0; i < 4; i++) {
 			if (r == MAP_DOWN / 2)		/* the party's cell: the arrow, a row of it */
 				bytes[MAP_ACROSS / 4] = (unsigned char)((bytes[MAP_ACROSS / 4] & 0x0F) | (arrow[i] << 4));
