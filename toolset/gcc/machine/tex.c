@@ -31,19 +31,38 @@ unsigned tex_step(int rows, int height)
 	return steps[height];
 }
 
-/* The run clipped to the screen: y0 and y1 moved in, the sum started
- * where the first row on the screen is; 0 when nothing is on it. */
-static int clip(int *y0, int *y1, unsigned step, unsigned *acc)
+/* The run clipped to rows top..bottom: y0 and y1 moved in, the sum
+ * started where the first row kept is; 0 when nothing is kept. */
+static int clip(int *y0, int *y1, int top, int bottom, unsigned step, unsigned *acc)
 {
-	if (*y1 >= MS_ROWS)
-		*y1 = MS_ROWS - 1;
-	if (*y0 < 0) {
-		*acc = (unsigned)((unsigned long)step * (unsigned)(-*y0));
-		*y0 = 0;
+	if (*y1 > bottom)
+		*y1 = bottom;
+	if (*y0 < top) {
+		*acc = (unsigned)((unsigned long)step * (unsigned)(top - *y0));
+		*y0 = top;
 	} else {
 		*acc = 0;
 	}
 	return *y0 <= *y1;
+}
+
+void tex_column_in(const struct tex *t, int col, int c, int y0, int y1, int top, int bottom)
+{
+	unsigned step = tex_step(t->rows, y1 - y0 + 1);
+	const unsigned char *px = t->pixels + col * t->rows;
+	const unsigned char *at = t->attributes + col * t->rows;
+	unsigned char *p;
+	unsigned acc, i;
+
+	if (!clip(&y0, &y1, top, bottom, step, &acc))
+		return;
+	p = ms_row(y0) + (c << 1);
+	for (; y0 <= y1; y0++, p += MS_STRIDE) {
+		i = acc >> 8;
+		p[0] = px[i];
+		p[1] = at[i];
+		acc += step;
+	}
 }
 
 void tex_column(const struct tex *t, int col, int c, int y0, int y1)
@@ -54,7 +73,7 @@ void tex_column(const struct tex *t, int col, int c, int y0, int y1)
 	unsigned char *p;
 	unsigned acc, i;
 
-	if (!clip(&y0, &y1, step, &acc))
+	if (!clip(&y0, &y1, 0, MS_ROWS - 1, step, &acc))
 		return;
 	p = ms_row(y0) + (c << 1);
 	for (; y0 <= y1; y0++, p += MS_STRIDE) {
@@ -73,7 +92,7 @@ void tex_sprite_column(const struct tex *t, int col, int c, int y0, int y1)
 	unsigned char *p;
 	unsigned acc, i;
 
-	if (!clip(&y0, &y1, step, &acc))
+	if (!clip(&y0, &y1, 0, MS_ROWS - 1, step, &acc))
 		return;
 	p = ms_row(y0) + (c << 1);
 	for (; y0 <= y1; y0++, p += MS_STRIDE) {

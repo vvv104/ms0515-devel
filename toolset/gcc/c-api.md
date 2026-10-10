@@ -226,6 +226,7 @@ empty texels left unwritten.
 |---|---|
 | `struct tex { unsigned char cols, rows; const unsigned char *pixels, *attributes; }` | a texture, column by column so that a column is a run of bytes: `pixels[cols][rows]` the patterns of eight pixels, `attributes[cols][rows]` the ink and paper of each; rows up to 255 |
 | `void tex_column(const struct tex *t, int col, int c, int y0, int y1)` | column `col` of the texture on screen column c, stretched over rows y0..y1 (both in); y0 may lie above the screen and y1 below it: the part off the screen is skipped, the stretch kept, as a wall nearer than the screen is tall does |
+| `void tex_column_in(const struct tex *t, int col, int c, int y0, int y1, int top, int bottom)` | the same cut to rows top..bottom instead of the screen's: a wall in a window that is not the whole screen |
 | `void tex_sprite_column(const struct tex *t, int col, int c, int y0, int y1)` | the same with the empty texels (a pattern of 0) left unwritten: a sprite's column, for a program that draws its sprites a column at a time against the depth of the wall there |
 | `void tex_sprite(const struct tex *t, int c, int y, int cells, int height)` | the texture as a sprite, `cells` wide and `height` rows high, its top left at cell column c and row y, its empty texels left unwritten; what lies off the screen is skipped |
 | `unsigned tex_step(int rows, int height)` | the texel step in 8.8 for `rows` texels over `height` rows: a table for the heights up to 255, remade when `rows` changes, a division past that |

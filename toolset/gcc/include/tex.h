@@ -28,6 +28,10 @@ struct tex {
  * than the screen is tall does. */
 void tex_column(const struct tex *t, int col, int c, int y0, int y1);
 
+/* The same cut to rows top..bottom instead of the screen's: a wall in a
+ * window that is not the whole screen. */
+void tex_column_in(const struct tex *t, int col, int c, int y0, int y1, int top, int bottom);
+
 /* The same with the empty texels - a pattern of 0 - left unwritten: a
  * sprite's column, for a program that draws its sprites a column at a
  * time against the depth of the wall there. */

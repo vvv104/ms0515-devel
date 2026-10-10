@@ -425,11 +425,12 @@ TEST_CASE("TEX: tex_column and tex_sprite against the host's own stretching") {
     for (int i = 0; i < 32; ++i) { wallPixels[i] = static_cast<uint8_t>(i + 1); wallAttributes[i] = static_cast<uint8_t>(i / 8 + 1); }
     const uint8_t spritePixels[8] = {0, 0x11, 0x22, 0x33, 0, 0x44, 0x55, 0x66};
     const uint8_t spriteAttributes[8] = {9, 1, 2, 3, 9, 4, 5, 6};
-    const auto column = [&](const uint8_t *px, const uint8_t *at, int rows, int col, int c, int y0, int y1, bool masked) {
+    const auto column = [&](const uint8_t *px, const uint8_t *at, int rows, int col, int c, int y0, int y1, bool masked,
+                            int top = 0, int bottom = 199) {
         const unsigned step = static_cast<unsigned>((static_cast<unsigned long>(rows) << 8) / static_cast<unsigned>(y1 - y0 + 1));
         unsigned acc = 0;
-        if (y1 > 199) y1 = 199;
-        if (y0 < 0) { acc = static_cast<uint16_t>(static_cast<unsigned long>(step) * static_cast<unsigned>(-y0)); y0 = 0; }
+        if (y1 > bottom) y1 = bottom;
+        if (y0 < top) { acc = static_cast<uint16_t>(static_cast<unsigned long>(step) * static_cast<unsigned>(top - y0)); y0 = top; }
         for (int y = y0; y <= y1; ++y, acc = static_cast<uint16_t>(acc + step)) {
             const unsigned i = acc >> 8;
             if (masked && px[col * rows + i] == 0) continue;
@@ -442,6 +443,7 @@ TEST_CASE("TEX: tex_column and tex_sprite against the host's own stretching") {
     column(wallPixels, wallAttributes, 8, 3, 5, -10, 29, false);
     column(wallPixels, wallAttributes, 8, 0, 6, 180, 219, false);
     column(wallPixels, wallAttributes, 8, 0, 7, 100, 399, false);
+    column(wallPixels, wallAttributes, 8, 2, 8, 100, 139, false, 110, 129);
     for (int y = 100; y <= 111; ++y)
         for (int c = 10; c <= 15; ++c) { cell(c, y)[0] = 0x11; cell(c, y)[1] = 0x07; }
     const auto sprite = [&](int c, int y, int cells, int height) {

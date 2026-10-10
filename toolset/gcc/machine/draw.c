@@ -66,14 +66,8 @@ const unsigned char *ms_glyph(int koi8)
 	return 0;
 }
 
-void ms_vfill(int c, int y0, int y1, unsigned char pixels, unsigned char attribute)
-{
-	unsigned char *p = ms_row(y0) + (c << 1);
-	unsigned word = ((unsigned)attribute << 8) | pixels;
-
-	for (; y0 <= y1; y0++, p += MS_STRIDE)
-		*(unsigned *)p = word;
-}
+/* ms_vfill is vfill.s: the loop a ray-cast view runs most, two
+ * instructions a row there against four here. */
 
 void ms_fill(int c0, int y0, int c1, int y1, unsigned char pixels, unsigned char attribute)
 {
