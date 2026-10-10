@@ -62,9 +62,7 @@ TEST_CASE("a step forward slides the walls over several passes, a turn swings th
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
-    crawl.tap('t');                                     /* the bricks: a step's parts show on them */
-    crawl.run(20);
-    const auto still = crawl.view();
+    const auto still = crawl.view();                    /* the bricks: a step's parts show on them */
     crawl.run(10);
     CHECK(crawl.view() == still);                       /* nothing moves on its own */
 
@@ -92,7 +90,14 @@ TEST_CASE("a step forward slides the walls over several passes, a turn swings th
     }
     CHECK(changes >= 4);
     CHECK(crawl.view() != stepped);
-    CHECK(crawl.cell(19, 190)[0] != 0);                 /* the compass letter */
+    /* The map: the party's arrow in the middle, a yellow cell among
+     * white ones, with walls lit round it. */
+    CHECK(crawl.cell(20, 168)[1] == 0x46);
+    CHECK(crawl.cell(20, 168)[0] != 0);
+    CHECK(crawl.cell(14, 140)[1] == 0x07);
+    int walls = 0;
+    for (int y = 140; y < 196; ++y) for (int c = 14; c < 26; ++c) walls += crawl.cell(c, y)[0] != 0;
+    CHECK(walls > 40);
 }
 
 TEST_CASE("the walls do not let the party through") {
@@ -107,7 +112,7 @@ TEST_CASE("the walls do not let the party through") {
     CHECK(crawl.view() == facing);
 }
 
-TEST_CASE("the pace: a pass every two frames, standing and moving") {
+TEST_CASE("the pace: a pass every three frames, standing and moving") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
@@ -117,8 +122,8 @@ TEST_CASE("the pace: a pass every two frames, standing and moving") {
     crawl.run(20);
     const auto [passes, frames] = passesAndFrames(crawl);
     CHECK(frames >= 150);
-    CHECK(passes * 2 <= frames);
-    CHECK(passes * 20 >= frames * 9);
+    CHECK(passes * 3 <= frames);
+    CHECK(passes * 30 >= frames * 9);
     CHECK(crawl.machine.emulator().isHires());
 }
 

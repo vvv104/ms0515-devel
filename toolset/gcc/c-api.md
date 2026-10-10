@@ -224,7 +224,7 @@ empty texels left unwritten.
 
 | | what |
 |---|---|
-| `struct tex { unsigned char cols, rows; const unsigned char *pixels, *attributes; }` | a texture, column by column so that a column is a run of bytes: `pixels[cols][rows]` the patterns of eight pixels, `attributes[cols][rows]` the ink and paper of each; rows up to 255 |
+| `struct tex { unsigned char cols, rows; const unsigned char *texels; }` | a texture, column by column so that a column is a run of texels, and a texel a screen word: the pattern of eight pixels, then the ink and paper over it - `texels[cols][rows][2]`, a row one word moved (the loop is assembler: nine instructions a row); rows up to 255 |
 | `void tex_column(const struct tex *t, int col, int c, int y0, int y1)` | column `col` of the texture on screen column c, stretched over rows y0..y1 (both in); y0 may lie above the screen and y1 below it: the part off the screen is skipped, the stretch kept, as a wall nearer than the screen is tall does |
 | `void tex_column_in(const struct tex *t, int col, int c, int y0, int y1, int top, int bottom)` | the same cut to rows top..bottom instead of the screen's: a wall in a window that is not the whole screen |
 | `void tex_sprite_column(const struct tex *t, int col, int c, int y0, int y1)` | the same with the empty texels (a pattern of 0) left unwritten: a sprite's column, for a program that draws its sprites a column at a time against the depth of the wall there |
@@ -242,6 +242,7 @@ is one.
 |---|---|
 | `int fx_div8(int num, int den)` | `num / den`, truncated toward zero, for a quotient that fits eight bits (`|num| < 256 * den`, `den > 0`): eight steps written out, half a general division.  A projection: `160 + fx_div8(x << 7, z)` for a point in view, since `x * 128 < 160 * z` there |
 | `int fx_mul(int a, int b)` | `a * b / 256`: the product of two 8.8 numbers, or of a number and an 8.8 factor, as 8.8, the full 32-bit product shifted; the result must fit an int |
+| `int fx_mul8(int a, int b)` | `a * b / 256` for `0 <= a < 256`: the fraction of `b`, in eight steps where `fx_mul` takes sixteen - a ray's first distance to a cell's edge |
 | `int fx_sin(int angle)`, `int fx_cos(int angle)` | the sine and the cosine of an angle in 256ths of a turn, as 8.8 (`fx_sin(64)` is 256), from a table of a quarter turn |
 
 STARS projects with `fx_div8`; a raycaster steps its rays with `fx_sin`

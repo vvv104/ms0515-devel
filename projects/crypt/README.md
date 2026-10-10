@@ -42,8 +42,8 @@ in WSL and `ms0515-run.exe` from there.
  |                      | hero 3 | hero 4|
  |                      |        |       | 76-135
  +------+---------------+--------+-------+ 136
- | turn | the map and   | attack | spell |
- | step | the compass   | wait   |       | 136-199
+ | turn | the map, the  | attack | spell |
+ | step | party mid-way | wait   |       | 136-199
  +------+---------------+----------------+
 ```
 
@@ -57,23 +57,27 @@ turn a tap into the key - and the keys do the same meanwhile.
 fractional position in the direction the column looks (Lode
 Vandevenne's way, in 8.8 fixed point): the ray walks the grid an edge
 at a time and the wall it meets stands as tall as its distance allows,
-from a table, with no division anywhere.  A wall is drawn flat, its
-shade by distance and by the side it shows, or with the brick texture
-(`tex.h`), the column by where the ray met the cell; the ceiling and
+from a table, with no division anywhere.  A wall is drawn with the
+brick texture (`tex.h`), the column by where the ray met the cell, or
+flat, its shade by distance and by the side it shows; the ceiling and
 the floor are painted only where the wall stood last time and stands
-no more.  `src/map.c` is the test level, drawn as text; `src/hud.c`
-the screen round the view; `src/main.c` the loop - a pass every two
-frames, a step or a turn in eight passes, the keys held as the
-keyboard's codes come.
+no more, and across the floor the edges of the cells ahead are drawn
+where they stand in perspective, sliding down as the party steps.
+`src/map.c` is the test level, drawn as text; `src/hud.c` the screen
+round the view, with the map of the cells about the party, 24 by 14 of
+them, the party's arrow in the middle and the level sliding under it;
+`src/main.c` the loop - a pass every three frames, a step or a turn in
+six passes, the keys held as the keyboard's codes come.
 
 The art is PNGs under `art/`, turned into C by `tools/mkart.py` at
 build time; what is there now is drawn by `art/placeholders.py` and
 stands in until real pictures come.
 
-What the machine does: flat walls turn round at 25 passes a second;
-the bricks at about 8, until their loop is assembler too (the
-column fill already is: `ms_vfill`).  On its way out the program
-prints how many passes it made in how many frames.
+What the machine does: the bricks turn round at 16 passes a second
+(the texture's loop and the column fill are assembler: `tex_run`,
+`ms_vfill`; the rays walk in sixteen-bit arithmetic cut to size,
+`fx_mul8`), flat walls would at 25.  On its way out the program prints
+how many passes it made in how many frames.
 
 ## Tests
 

@@ -4,6 +4,7 @@
 #include <ms0515.h>
 #include <string.h>
 #include "hud.h"
+#include "map.h"
 
 #define BAND MS_INK(7) | MS_PAPER(1)		/* white on blue */
 #define FRAME 0x00, MS_PAPER(1)			/* a blue box */
@@ -55,14 +56,46 @@ void hud_hero(int slot, const struct hero *h)
 	bar(c, y + 51, h->mana, h->manaMax, MS_INK(1) | MS_BRIGHT);
 }
 
-void hud_compass(int angle)
-{
-	static const char letters[4] = {'E', 'S', 'W', 'N'};	/* 0 along +x, then clockwise */
-	char text[2];
+#define MAP_CELL 14			/* the map's ground: cells 14..25, rows 140..197 */
+#define MAP_ROW 140
+#define MAP_ACROSS 24			/* cells of the level shown, 4 pixels each */
+#define MAP_DOWN 14
 
-	text[0] = letters[((angle + 32) >> 6) & 3];
-	text[1] = 0;
-	ms_text(19, 186, text, MS_INK(6) | MS_BRIGHT);
+/* The arrow of the party's way, 4 by 4 pixels, a nibble a row: east,
+ * south, west, north. */
+static const unsigned char arrows[4][4] = {
+	{0x8, 0xC, 0xE, 0xC}, {0x6, 0x6, 0xF, 0x6}, {0x1, 0x3, 0x7, 0x3}, {0x6, 0xF, 0x6, 0x6},
+};
+
+/* A wall of the level on the map; nothing past the level's edge. */
+static int wallAt(int x, int y)
+{
+	return x >= 0 && y >= 0 && x < MAP_SIDE && y < MAP_SIDE && map_at(x, y);
+}
+
+void hud_map(int cellX, int cellY, int angle)
+{
+	const unsigned char *arrow = arrows[((angle + 32) >> 6) & 3];
+	unsigned char bytes[MAP_ACROSS / 2];
+	unsigned char *p;
+	int r, q, i, my, mx;
+
+	for (r = 0; r < MAP_DOWN; r++) {
+		my = cellY - MAP_DOWN / 2 + r;
+		for (q = 0; q < MAP_ACROSS; q += 2) {
+			mx = cellX - MAP_ACROSS / 2 + q;
+			bytes[q >> 1] = (unsigned char)((wallAt(mx, my) ? 0xF0 : 0) | (wallAt(mx + 1, my) ? 0x0F : 0));
+		}
+		for (i = 0; i < 4; i++) {
+			if (r == MAP_DOWN / 2)		/* the party's cell: the arrow, a row of it */
+				bytes[MAP_ACROSS / 4] = (unsigned char)((bytes[MAP_ACROSS / 4] & 0x0F) | (arrow[i] << 4));
+			p = ms_row(MAP_ROW + r * 4 + i) + (MAP_CELL << 1);
+			for (q = 0; q < MAP_ACROSS / 2; q++, p += 2) {
+				p[0] = bytes[q];
+				p[1] = (unsigned char)(r == MAP_DOWN / 2 && q == MAP_ACROSS / 4 ? MS_INK(6) | MS_BRIGHT : MS_INK(7));
+			}
+		}
+	}
 }
 
 void hud_title(const char *place, int day)

@@ -57,6 +57,7 @@ function(_rt11_gcc_runtime)
         "${RT11_GCC_DIR}/machine/psw.s"
         "${RT11_GCC_DIR}/machine/screen.c"
         "${RT11_GCC_DIR}/machine/tex.c"
+        "${RT11_GCC_DIR}/machine/texrun.s"
         "${RT11_GCC_DIR}/machine/vfill.s")
     target_compile_options(rt11 PRIVATE -Wall -Wextra)
     target_include_directories(rt11 PUBLIC "${RT11_GCC_DIR}/include")

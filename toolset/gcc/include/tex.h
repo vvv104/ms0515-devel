@@ -9,17 +9,17 @@
  * high byte of a sum, no division in the row - and a sprite is the
  * same in both directions, with its empty texels left unwritten.
  *
- * A texture lies column by column, so that a column is a run of bytes:
- * pixels[cols][rows] the patterns of eight pixels, attributes[cols][rows]
- * the ink and paper of each; the two planes apart.  Rows up to 255. */
+ * A texture lies column by column, so that a column is a run of texels,
+ * and a texel is a screen word: the pattern of eight pixels, then the
+ * ink and paper over it - two bytes, texels[cols][rows][2], so that a
+ * row is one word moved.  Rows up to 255. */
 
 #ifndef TEX_H
 #define TEX_H
 
 struct tex {
 	unsigned char cols, rows;
-	const unsigned char *pixels;		/* cols * rows, column-major */
-	const unsigned char *attributes;	/* the same way */
+	const unsigned char *texels;		/* cols * rows words, column-major */
 };
 
 /* Column `col` of the texture on screen column c, stretched over rows

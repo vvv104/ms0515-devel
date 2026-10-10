@@ -1,6 +1,6 @@
 /* FX - the fixed-point arithmetic of fx.h put to the test: for each
  * pair of the table a line "num den: q" of fx_div8 and "a b: p" of
- * fx_mul, then the sine and the cosine of some angles; the harness
+ * fx_mul and of fx_mul8, then the sine and the cosine of some angles; the harness
  * (../tests) does the sums on the host.  The operands pass through
  * volatile so that GCC folds nothing. */
 
@@ -19,6 +19,11 @@ static const int muls[][2] = {
 	{-3, 100}, {181, 181}, {30000, -2}, {255, 255}, {0, 32767},
 };
 
+static const int mul8s[][2] = {
+	{0, 32767}, {255, 32767}, {255, -32767}, {128, 256}, {1, 256},
+	{1, 255}, {200, -1000}, {42, 4096}, {255, 1}, {17, -3000},
+};
+
 static const int angles[] = {0, 1, 32, 63, 64, 65, 96, 127, 128, 129, 160, 191, 192, 193, 224, 255, 256, 300, -1, -64};
 
 int main(void)
@@ -32,6 +37,10 @@ int main(void)
 	for (k = 0; k < (int)(sizeof muls / sizeof muls[0]); k++) {
 		volatile int va = muls[k][0], vb = muls[k][1];
 		printf("%d %d: %d\n", muls[k][0], muls[k][1], fx_mul(va, vb));
+	}
+	for (k = 0; k < (int)(sizeof mul8s / sizeof mul8s[0]); k++) {
+		volatile int va = mul8s[k][0], vb = mul8s[k][1];
+		printf("%d %d: %d\n", mul8s[k][0], mul8s[k][1], fx_mul8(va, vb));
 	}
 	for (k = 0; k < (int)(sizeof angles / sizeof angles[0]); k++) {
 		volatile int va = angles[k];

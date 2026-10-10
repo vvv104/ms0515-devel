@@ -3,9 +3,45 @@
 / The arguments on the stack above the return address, the result in
 / r0, r0 and r1 free, r2..r5 kept - GCC's convention.
 
-	.globl	_fx_div8, _fx_mul
+	.globl	_fx_div8, _fx_mul, _fx_mul8
 
 	.text
+
+/ int fx_mul8(int a, int b): a * b / 256 for 0 <= a < 256 - the fraction
+/ of b.  The eight bits of a go by one at a time from the top, the
+/ product of |b| gathered in r0:r1 and its high word kept, the sign put
+/ back; eight steps where fx_mul takes sixteen.
+_fx_mul8:
+	mov	r2, -(sp)
+	mov	r3, -(sp)
+	mov	6(sp), r2		/ a, the multiplier, bits 7..0
+	mov	010(sp), r3		/ b
+	mov	r3, -(sp)		/ its sign, for the end
+	bpl	1f
+	neg	r3
+1:	clr	r0			/ r0:r1 = |b| * a, built from a's top bit down
+	clr	r1
+	swab	r2			/ a's bits to the top of r2
+.rept	8
+	asl	r1			/ the product doubled
+	rol	r0
+	asl	r2			/ the next bit of a out
+	bcc	2f
+	add	r3, r1			/ in: add |b|
+	adc	r0
+2:
+.endr
+	swab	r1			/ the middle sixteen bits: r0's low over r1's high
+	bic	$0177400, r1
+	swab	r0
+	bic	$0377, r0
+	bis	r1, r0
+	tst	(sp)+
+	bpl	3f
+	neg	r0
+3:	mov	(sp)+, r3
+	mov	(sp)+, r2
+	rts	pc
 
 / int fx_div8(int num, int den): num / den, truncated toward zero, for a
 / quotient of eight bits (|num| < 256 * den, den > 0): the top eight

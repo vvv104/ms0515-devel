@@ -9,23 +9,25 @@
 #include <tex.h>
 
 /* 4 columns of 8 texels: column k's texel r is 8k + r + 1 as a pattern,
- * k + 1 as an attribute - all of them lit. */
-static unsigned char wallPixels[32];
-static unsigned char wallAttributes[32];
-static const struct tex wall = {4, 8, wallPixels, wallAttributes};
+ * k + 1 as an attribute - all of them lit.  A texel is two bytes, the
+ * pattern then the attribute. */
+static unsigned char wallTexels[64];
+static const struct tex wall = {4, 8, wallTexels};
 
 /* 2 columns of 4: the first texel of each column empty. */
-static const unsigned char spritePixels[8] = {0, 0x11, 0x22, 0x33, 0, 0x44, 0x55, 0x66};
-static const unsigned char spriteAttributes[8] = {9, 1, 2, 3, 9, 4, 5, 6};
-static const struct tex sprite = {2, 4, spritePixels, spriteAttributes};
+static const unsigned char spriteTexels[16] = {
+	0, 9, 0x11, 1, 0x22, 2, 0x33, 3,
+	0, 9, 0x44, 4, 0x55, 5, 0x66, 6,
+};
+static const struct tex sprite = {2, 4, spriteTexels};
 
 int main(void)
 {
 	int i;
 
 	for (i = 0; i < 32; i++) {
-		wallPixels[i] = (unsigned char)(i + 1);
-		wallAttributes[i] = (unsigned char)(i / 8 + 1);
+		wallTexels[2 * i] = (unsigned char)(i + 1);
+		wallTexels[2 * i + 1] = (unsigned char)(i / 8 + 1);
 	}
 	ms_screen_begin(0);
 	tex_column(&wall, 1, 3, 20, 39);	/* 8 texels over 20 rows */

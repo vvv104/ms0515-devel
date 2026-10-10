@@ -31,8 +31,11 @@ struct hero {
 void hud_frame(void);
 /* A hero's panel: slot 0..3, the face, the name, the bars. */
 void hud_hero(int slot, const struct hero *h);
-/* The compass's letter for the party's direction (256ths of a turn). */
-void hud_compass(int angle);
+/* The map round the party: the cells of the level, four pixels each,
+ * 24 across by 14 down, the party's cell in the middle as an arrow
+ * pointing the way it faces (angle in 256ths of a turn, 0 east); the
+ * map slides under the arrow as the party moves. */
+void hud_map(int cellX, int cellY, int angle);
 /* The place's name and the day on the band's first line, a message on
  * its second. */
 void hud_title(const char *place, int day);

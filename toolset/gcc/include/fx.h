@@ -21,6 +21,10 @@ int fx_div8(int num, int den);
  * lost on the way; the result must fit an int. */
 int fx_mul(int a, int b);
 
+/* a * b / 256 for 0 <= a < 256: the fraction of b, in eight steps where
+ * fx_mul takes sixteen - a ray's first distance to a cell's edge. */
+int fx_mul8(int a, int b);
+
 /* The sine and the cosine of an angle in 256ths of a turn, as 8.8:
  * fx_sin(64) is 256.  A table of a quarter turn, 65 entries. */
 int fx_sin(int angle);

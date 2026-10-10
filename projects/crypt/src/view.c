@@ -27,7 +27,7 @@
 #define PLANE 148			/* tan 30 degrees in 8.8 */
 #define PLANE_SHARE 23			/* 2/22 of the plane, in 8.8, a column's step */
 #define FAR 32767
-#define STEPS 48			/* cells a ray may walk */
+#define STEPS 24			/* cells a ray may walk: the farthest wall drawn */
 #define MIDDLE (VIEW_TOP + VIEW_ROWS / 2)
 #define BOTTOM (VIEW_TOP + VIEW_ROWS - 1)
 
@@ -48,8 +48,8 @@ void view_init(void)
 		topSeen[i] = VIEW_TOP;
 		bottomSeen[i] = BOTTOM;
 	}
-	recip[0] = recip[1] = FAR;
-	for (i = 2; i < 512; i++)
+	recip[0] = recip[1] = recip[2] = FAR;	/* 65536 / 2 is past an int */
+	for (i = 3; i < 512; i++)
 		recip[i] = (int)(65536L / i);
 	heights[0] = 2 * VIEW_ROWS;
 	for (i = 1; i < 512; i++) {
@@ -65,45 +65,53 @@ int view_height(int c)
 
 /* The ray of one column walked to its wall: the perpendicular distance
  * back in 8.8, the side it hit (0 an x edge, 1 a y edge) and where
- * along the cell (0..255) through the pointers. */
+ * along the cell (0..255) through the pointers.
+ *
+ * The distances to the edges are unsigned and never saturate: the
+ * nearer one is stepped, so both stay within a delta of the ray's way
+ * so far, under STEPS cells of it, and a delta is at most FAR - the
+ * sum fits sixteen bits.  The cell is read straight off the level;
+ * a ray that leaves it has hit a wall. */
 static int cast(const struct view *v, int rayX, int rayY, int *side, int *along)
 {
 	int mapX = v->x >> 8, mapY = v->y >> 8;
-	int deltaX = recip[rayX < 0 ? -rayX : rayX];
-	int deltaY = recip[rayY < 0 ? -rayY : rayY];
-	int stepX, stepY, sideX, sideY, n, perp;
+	unsigned deltaX = (unsigned)recip[rayX < 0 ? -rayX : rayX];
+	unsigned deltaY = (unsigned)recip[rayY < 0 ? -rayY : rayY];
+	unsigned sideX, sideY;
+	int stepX, stepY, n, hit = 0, perp;
 
 	if (rayX < 0) {
 		stepX = -1;
-		sideX = fx_mul(v->x & 255, deltaX);
+		sideX = (unsigned)fx_mul8(v->x & 255, (int)deltaX);
 	} else {
 		stepX = 1;
-		sideX = fx_mul(256 - (v->x & 255), deltaX);
+		sideX = deltaX - (unsigned)fx_mul8(v->x & 255, (int)deltaX);
 	}
 	if (rayY < 0) {
 		stepY = -1;
-		sideY = fx_mul(v->y & 255, deltaY);
+		sideY = (unsigned)fx_mul8(v->y & 255, (int)deltaY);
 	} else {
 		stepY = 1;
-		sideY = fx_mul(256 - (v->y & 255), deltaY);
+		sideY = deltaY - (unsigned)fx_mul8(v->y & 255, (int)deltaY);
 	}
 	for (n = 0; n < STEPS; n++) {
 		if (sideX < sideY) {
-			sideX = sideX > FAR - deltaX ? FAR : sideX + deltaX;
+			sideX += deltaX;
 			mapX += stepX;
-			*side = 0;
+			hit = 0;
 		} else {
-			sideY = sideY > FAR - deltaY ? FAR : sideY + deltaY;
+			sideY += deltaY;
 			mapY += stepY;
-			*side = 1;
+			hit = 1;
 		}
-		if (map_at(mapX, mapY))
+		if (((mapX | mapY) & ~(MAP_SIDE - 1)) || map[(mapY << 5) + mapX])
 			break;
 	}
-	perp = *side == 0 ? sideX - deltaX : sideY - deltaY;
+	perp = (int)(hit == 0 ? sideX - deltaX : sideY - deltaY);
 	if (perp < 16)
 		perp = 16;
-	*along = (*side == 0 ? v->y + fx_mul(perp, rayY) : v->x + fx_mul(perp, rayX)) & 255;
+	*side = hit;
+	*along = (hit == 0 ? v->y + fx_mul(perp, rayY) : v->x + fx_mul(perp, rayX)) & 255;
 	return perp;
 }
 
@@ -149,6 +157,52 @@ static void column(const struct view *v, int c, int perp, int side, int along)
 	}
 }
 
+#define FLOOR 0xAA, MS_INK(4)		/* the floor's dither */
+#define LINE 0xFF, MS_INK(4)		/* a cell's edge across it */
+#define LINES 6				/* the edges ahead that are drawn */
+
+static int lineRows[LINES];		/* where the edges were drawn last time */
+static int lineCount;
+
+/* A row of the floor across the window, where the floor is: pattern
+ * and attribute as a word. */
+static void floorRow(int row, unsigned char pattern, unsigned char attribute)
+{
+	unsigned word = ((unsigned)attribute << 8) | pattern;
+	unsigned char *p = ms_row(row) + (VIEW_LEFT << 1);
+	int c;
+
+	for (c = 0; c < VIEW_CELLS; c++, p += 2)
+		if (row > bottomSeen[c])
+			*(unsigned *)p = word;
+}
+
+/* The edges of the floor's cells ahead, drawn across the floor where
+ * they stand in perspective: the first a part of a cell away - what is
+ * left of the cell the party is on, the way it faces - the next a cell
+ * further, and so on; they slide down as the party steps.  The lines
+ * of the last pass are painted over first.  During a turn the way is
+ * taken as the nearer of the four. */
+static void floorLines(const struct view *v)
+{
+	int way = ((v->angle + 32) >> 6) & 3;
+	int frac = (way == 0 || way == 2) ? v->x & 255 : v->y & 255;
+	int ahead = (way == 0 || way == 1) ? CELL - frac : (frac ? frac : CELL);
+	int i, index, row;
+
+	for (i = 0; i < lineCount; i++)
+		floorRow(lineRows[i], FLOOR);
+	lineCount = 0;
+	for (i = 0; i < LINES; i++, ahead += CELL) {
+		index = ahead >> 4;
+		row = MIDDLE + heights[index > 511 ? 511 : index] / 2;
+		if (row > BOTTOM)
+			continue;
+		floorRow(row, LINE);
+		lineRows[lineCount++] = row;
+	}
+}
+
 void view_render(const struct view *v)
 {
 	int dirX = fx_cos(v->angle), dirY = fx_sin(v->angle);
@@ -161,4 +215,5 @@ void view_render(const struct view *v)
 		perp = cast(v, rayX, rayY, &side, &along);
 		column(v, c, perp, side, along);
 	}
+	floorLines(v);
 }

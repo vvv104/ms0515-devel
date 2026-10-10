@@ -20,9 +20,9 @@
 #include "view.h"
 
 #ifndef PACE
-#define PACE 2				/* frames a pass takes: 25 a second */
+#define PACE 3				/* frames a pass takes: 16 a second, what the bricks allow */
 #endif
-#define MOVE_PASSES 8			/* passes a step or a turn is shown in */
+#define MOVE_PASSES 6			/* passes a step or a turn is shown in: a third of a second */
 
 enum { kForward, kBack, kLeft, kRight, kSideLeft, kSideRight, kKeys };
 
@@ -35,7 +35,7 @@ static const struct hero heroes[4] = {
 	{"ELSA", &face3, 18, 18, 20, 20}, {"VERA", &face4, 30, 30, 12, 12},
 };
 #ifndef TEXTURED
-#define TEXTURED 0			/* the walls flat to begin with; T switches */
+#define TEXTURED 1			/* the walls with their bricks; T switches to flat */
 #endif
 static struct view view = {0, 0, 0, TEXTURED};
 static int left, dx, dy, dAngle;	/* the move in progress: passes left and a pass's share */
@@ -99,7 +99,8 @@ static int pass(void)
 {
 	int c;
 
-	ms_held_tick(keys, kKeys);
+	for (c = 0; c < PACE; c++)		/* the hold timers count frames, a pass is PACE of them */
+		ms_held_tick(keys, kKeys);
 	while ((c = ms_key()) >= 0) {
 		if (c == MS_KEY_Q)
 			return 0;
@@ -114,8 +115,8 @@ static int pass(void)
 		if (--left == 0) {
 			view.x = (view.x & ~255) | (CELL / 2);	/* squarely on the cell */
 			view.y = (view.y & ~255) | (CELL / 2);
-			view.angle &= ~63;
-			hud_compass(view.angle);
+			view.angle = (view.angle + 32) & ~63;	/* and squarely facing */
+			hud_map(view.x >> 8, view.y >> 8, view.angle);
 		}
 	} else {
 		command();
@@ -141,7 +142,7 @@ int main(void)
 	hud_message("THE AIR IS COLD AND STILL.");
 	for (i = 0; i < 4; i++)
 		hud_hero(i, &heroes[i]);
-	hud_compass(view.angle);
+	hud_map(view.x >> 8, view.y >> 8, view.angle);
 	started = last = ms_frames;
 	do {
 		while (ms_frames - last < PACE)

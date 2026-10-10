@@ -431,7 +431,22 @@ TEST_CASE("TEX: tex_column and tex_sprite against the host's own stretching") {
         unsigned acc = 0;
         if (y1 > bottom) y1 = bottom;
         if (y0 < top) { acc = static_cast<uint16_t>(static_cast<unsigned long>(step) * static_cast<unsigned>(top - y0)); y0 = top; }
-        for (int y = y0; y <= y1; ++y, acc = static_cast<uint16_t>(acc + step)) {
+        /* The rule of texrun.s: a texel covering four rows or more (a
+         * step of 64 at most) is found once for a run of four rows, two
+         * rows for two; the rows left over go one by one; a sprite's
+         * column always one by one. */
+        const int k = masked ? 1 : step <= 64 ? 4 : step <= 128 ? 2 : 1;
+        const int n = y1 - y0 + 1;
+        int y = y0;
+        for (int run = 0; run < n / k; ++run, acc = static_cast<uint16_t>(acc + step * k)) {
+            const unsigned i = acc >> 8;
+            for (int r = 0; r < k; ++r, ++y) {
+                if (masked && px[col * rows + i] == 0) continue;
+                cell(c, y)[0] = px[col * rows + i];
+                cell(c, y)[1] = at[col * rows + i];
+            }
+        }
+        for (; y <= y1; ++y, acc = static_cast<uint16_t>(acc + step)) {
             const unsigned i = acc >> 8;
             if (masked && px[col * rows + i] == 0) continue;
             cell(c, y)[0] = px[col * rows + i];
@@ -578,7 +593,7 @@ TEST_CASE("FILES: .LOOKUP, .READW, .READ and .WAIT, .ENTER and .WRITW, .CLOSE") 
     fs::remove_all(dir, ec);
 }
 
-/* FX (examples/fx.c): fx_div8, fx_mul, fx_sin and fx_cos against the
+/* FX (examples/fx.c): fx_div8, fx_mul, fx_mul8, fx_sin and fx_cos against the
  * host's own arithmetic, the table's values by the same rounding. */
 TEST_CASE("FX: the fixed-point division, multiply, sine and cosine") {
     if (!built("FX")) { MESSAGE("FX.SAV not built - skipped"); return; }
@@ -595,11 +610,18 @@ TEST_CASE("FX: the fixed-point division, multiply, sine and cosine") {
         {1000, 128}, {-1000, 128}, {32767, 255}, {-32767, 255}, {3, 100},
         {-3, 100}, {181, 181}, {30000, -2}, {255, 255}, {0, 32767},
     };
+    constexpr int mul8s[][2] = {
+        {0, 32767}, {255, 32767}, {255, -32767}, {128, 256}, {1, 256},
+        {1, 255}, {200, -1000}, {42, 4096}, {255, 1}, {17, -3000},
+    };
     constexpr int angles[] = {0, 1, 32, 63, 64, 65, 96, 127, 128, 129, 160, 191, 192, 193, 224, 255, 256, 300, -1, -64};
     std::vector<std::string> expected;
     for (const auto &d : divs)
         expected.push_back(std::to_string(d[0]) + " " + std::to_string(d[1]) + ": " + std::to_string(d[0] / d[1]));
     for (const auto &m : muls)
+        expected.push_back(std::to_string(m[0]) + " " + std::to_string(m[1]) + ": " +
+                           std::to_string(static_cast<long>(m[0]) * m[1] / 256));
+    for (const auto &m : mul8s)
         expected.push_back(std::to_string(m[0]) + " " + std::to_string(m[1]) + ": " +
                            std::to_string(static_cast<long>(m[0]) * m[1] / 256));
     const auto sine = [](int angle) {
