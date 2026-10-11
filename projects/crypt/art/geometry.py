@@ -64,7 +64,9 @@ def px(theta):
 
 
 def table(name, kind, values):
-    """A C array, nested lists as nested braces."""
+    """A C array, nested lists as nested braces: its declaration for
+    the header and its definition for the C file, since the assembler
+    reads the tables too."""
     def text(v):
         if isinstance(v, list):
             return "{" + ", ".join(text(e) for e in v) + "}"
@@ -74,7 +76,7 @@ def table(name, kind, values):
     while isinstance(v, list):
         dims += f"[{len(v)}]"
         v = v[0]
-    return f"static const {kind} {name}{dims} = {text(values)};"
+    return (f"extern const {kind} {name}{dims};", f"const {kind} {name}{dims} = {text(values)};")
 
 
 def walls():
@@ -162,13 +164,7 @@ def main():
     out = Path(sys.argv[1])
     tops, halves, depths = walls()
     least, most = spans(depths)
-    lines = [
-        "/* geometry.h: the view's tables, made by art/geometry.py - not for editing. */",
-        "",
-        f"#define PLANE_PHASES {PHASES}",
-        f"#define PLANE_LATERALS {LATERALS}",
-        f"#define PLANE_DEPTH {DEPTH}",
-        f"#define CROSS_DEPTH {CROSS_DEPTH}",
+    tables = [
         table("wall_top", "unsigned char", tops),
         table("wall_half", "unsigned char", halves),
         table("wall_z", "int", depths),
@@ -182,7 +178,18 @@ def main():
         table("col_tan", "int", [int(round(256 * math.tan(angle(c * 8 + 3.5)))) for c in range(COLUMNS)]),
         table("phase_8", "int", [int(round(256 * k / PHASES)) for k in range(PHASES)]),
     ]
+    lines = [
+        "/* geometry.h: the view's tables, made by art/geometry.py - not for editing. */",
+        "",
+        f"#define PLANE_PHASES {PHASES}",
+        f"#define PLANE_LATERALS {LATERALS}",
+        f"#define PLANE_DEPTH {DEPTH}",
+        f"#define CROSS_DEPTH {CROSS_DEPTH}",
+    ] + [declaration for declaration, _ in tables]
     out.write_text("\n".join(lines) + "\n", newline="\n")
+    source = ["/* geometry.c: the view's tables, made by art/geometry.py - not for editing. */", ""]
+    source += [definition for _, definition in tables]
+    out.with_suffix(".c").write_text("\n".join(source) + "\n", newline="\n")
 
 
 if __name__ == "__main__":

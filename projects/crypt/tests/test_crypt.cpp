@@ -24,7 +24,7 @@ namespace {
 
 constexpr int kWarmUp = 200;     /* frames before the first key: the data loaded, the screen up */
 constexpr int kTurnPace = 5;     /* frames a pass of a turn takes (main.c TURN_PACE) */
-constexpr int kStepPace = 6;     /* of a step (STEP_PACE) */
+constexpr int kStepPace = 5;     /* of a step (STEP_PACE) */
 constexpr int kIdlePace = 2;
 constexpr int kStepPasses = 5;   /* a step's phases (planes.py PHASES) */
 constexpr int kTurnPasses = 8;
