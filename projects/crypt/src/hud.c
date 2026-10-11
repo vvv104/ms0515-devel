@@ -109,18 +109,24 @@ void hud_map(int cellX, int cellY, int angle)
 	}
 }
 
+/* The band's first line: the place, to 30 letters, and the day.  Put
+ * together by hand: strlen and memcpy would bring the whole of the
+ * runtime's string.c into a program short of room. */
 void hud_title(const char *place, int day)
 {
+	static const char dayWord[] = "  DAY ";
 	char line[41];
-	int n = (int)strlen(place);
+	int n = 0, i;
 
-	if (n > 30)
-		n = 30;
-	memcpy(line, place, (unsigned)n);
-	memcpy(line + n, "  DAY ", 6);
-	line[n + 6] = (char)('0' + day / 10);
-	line[n + 7] = (char)('0' + day % 10);
-	line[n + 8] = 0;
+	while (place[n] && n < 30) {
+		line[n] = place[n];
+		n++;
+	}
+	for (i = 0; dayWord[i]; i++)
+		line[n++] = dayWord[i];
+	line[n++] = (char)('0' + day / 10);
+	line[n++] = (char)('0' + day % 10);
+	line[n] = 0;
 	ms_fill(0, 0, 39, 7, 0x00, MS_PAPER(1));
 	ms_text(1, 0, line, BAND);
 }

@@ -54,8 +54,14 @@ add_custom_command(
     VERBATIM)
 add_custom_target(geometry DEPENDS "${GEOMETRY_H}")
 
+# The program must end under the video memory's window at 0100000, and
+# it nearly fills the room below: the view is compiled for speed (-O2,
+# the toolchain's), the rest for size - a third smaller, and none of it
+# runs in a pass's loops - and the stack is 512 bytes, of which a run
+# through every move uses under 200.
 rt11_c_library(NAME art SOURCES ${ART} INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}")
 rt11_c_library(NAME engine SOURCES src/map.c src/view.c src/rows.s src/hud.c INCLUDE src "${ART_DIR}")
+set_source_files_properties(src/map.c src/hud.c src/main.c PROPERTIES COMPILE_OPTIONS "-Os")
 target_link_libraries(engine PUBLIC art)		# the screen round the view draws the party's faces
 add_dependencies(engine geometry)
-rt11_c_program(NAME CRYPT SOURCES src/main.c LIBRARIES engine STACK 1536)
+rt11_c_program(NAME CRYPT SOURCES src/main.c LIBRARIES engine STACK 512)

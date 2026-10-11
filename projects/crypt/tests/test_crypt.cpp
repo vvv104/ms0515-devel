@@ -24,7 +24,7 @@ namespace {
 
 constexpr int kWarmUp = 200;     /* frames before the first key: the data loaded, the screen up */
 constexpr int kTurnPace = 5;     /* frames a pass of a turn takes (main.c TURN_PACE) */
-constexpr int kStepPace = 5;     /* of a step (STEP_PACE) */
+constexpr int kStepPace = 6;     /* of a step (STEP_PACE) */
 constexpr int kIdlePace = 2;
 constexpr int kStepPasses = 5;   /* a step's phases (planes.py PHASES) */
 constexpr int kTurnPasses = 8;
@@ -263,6 +263,48 @@ TEST_CASE("two steps on and two back leave the picture as it was drawn afresh") 
         MESSAGE("back on the first cell, cells differing from the start: " << n << where.str());
     }
     CHECK(crawl.view() == start);
+}
+
+TEST_CASE("up to the wall ahead: its corners lined, its mortar following, a turn there and back changing nothing") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    for (int i = 0; i < 8; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }
+    crawl.png("wallTwo");
+    /* Two cells from the wall ahead it is 80 rows tall in the middle
+     * column, with mortar at the quarters.  On the left the corridor's
+     * wall meets it in a corner, and a line stands down the corner at
+     * view pixel 36, where the face across ends, with no joint of the
+     * side wall beside it; on the right the corridor's wall ends a cell
+     * before, and the wall across goes on flat past pixel 139: no
+     * line there. */
+    for (int r : {40, 60, 80}) CHECK_FALSE(coloured(crawl, 84, r));
+    for (int r : {30, 50, 70, 90}) CHECK(coloured(crawl, 84, r));
+    for (int r = 24; r <= 96; ++r) { CAPTURE(r); CHECK_FALSE(coloured(crawl, 36, r)); }
+    for (int r = 24; r <= 40; ++r) {
+        CAPTURE(r);
+        CHECK(coloured(crawl, 35, r));
+        CHECK(coloured(crawl, 38, r));
+        CHECK(coloured(crawl, 139, r));
+    }
+    /* One cell from it the wall overflows the window: the top row and
+     * the horizon are mortar, nothing else in the middle column is
+     * black - the mortar of the step before has not stayed behind. */
+    crawl.tap(ms0515::Key::Up); settle(crawl);
+    crawl.png("wallOne");
+    CHECK_FALSE(coloured(crawl, 84, 0));
+    CHECK_FALSE(coloured(crawl, 84, 60));
+    for (int r = 1; r < kViewRows; ++r) {
+        if (r == 60) continue;
+        CAPTURE(r);
+        CHECK(coloured(crawl, 84, r));
+    }
+    /* A turn away and back: the picture as it was. */
+    const auto at = crawl.view();
+    crawl.tap(ms0515::Key::Left); settle(crawl);
+    crawl.tap(ms0515::Key::Right); settle(crawl);
+    crawl.png("wallBack");
+    CHECK(crawl.view() == at);
 }
 
 TEST_CASE("a step forward runs the joints along the walls and moves nothing else") {

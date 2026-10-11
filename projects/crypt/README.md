@@ -82,7 +82,10 @@ cell on its way down to the floor the row is part wall and part
 floor: there the wall's red is the paper and the floor's green the
 ink, and the black of the lines waits for a row that is wall
 throughout - else the floor came out black in triangles under the
-wall's foot.
+wall's foot.  Where a wall ends - a wall across the axis at an edge
+whose neighbour shows no face across, a wall along it at an end with
+floor before or past it - a line stands down the corner, and no joint
+comes within a pixel of it.
 
 Each pass `src/view.c` finds what each column shows - the cells about
 the party gone through front to back, each wall face taking the pixel
@@ -102,15 +105,16 @@ the rest.  The loops of a row of the column are `src/rows.s`.
 `src/hud.c` the screen round the view, with the map of the cells about
 the party, the party's arrow in the middle and the level sliding under
 it; `src/main.c` the loop: a step in five passes, a turn in eight, a
-pass of either in five frames.
+pass of a turn in five frames and of a step in six.
 
 The faces are PNGs under `art/`, turned into C by `tools/mkart.py` at
 build time; what is there now is drawn by `art/placeholders.py` and
 stands in until real pictures come.
 
 What the machine does: a pass of a turn in 3.5 frames, a pass of a
-step in 4.8 - ten a second, half a second a step, four fifths a
-quarter turn.  On its way out the program prints how many passes it
+step in 5.2 - ten turn passes a second and eight of a step: four
+fifths of a second a quarter turn, three fifths a step.  On its way
+out the program prints how many passes it
 made in how many frames, and how many of them drew the view in how
 many; a build with `-DPROF=1` finds the pieces and paints nothing,
 `-DPROF=2` paints without finding, `-DPROF=3` leaves out what moves,
@@ -121,10 +125,20 @@ drawn and taken out again about one frame, the finding of the pieces
 and the columns composed again (two a pass, at the far end of the
 side walls) about one each, the columns' going up half a one, the
 rest in the finding of where each joint falls and the bookkeeping.
-The finding and the joints are the next things for assembler.  The
-program is 62 blocks and ends just under the video memory's window at
-0100000; the level's text is read as it is, and the pieces keep a
-plane's and a wall's fields over each other, to stay there.
+The finding and the joints are the next things for assembler, for
+speed and for room both.  The program is 62 blocks, 16.9 KB of code
+and 13.8 KB of data, and ends under the video memory's window at
+0100000 with a kilobyte to spare: the level's text is read as it is,
+the pieces keep a plane's and a wall's fields over each other, the
+stack is 512 bytes (a run through every move uses under 200), the
+band's title is put together without the runtime's string.c, and the
+screen round the view, the level and the loop are compiled for size
+(the view is not: the compiler's size mode calls subroutines for
+shifts, and a pass slows by a third).  Any more - other kinds of wall,
+floor and ceiling, monsters - needs the memory banks: the code and the
+stack under 040000, the data from there in the primary bank with the
+extended banks behind it for what is not in use every pass, which the
+assembler must make room for first.
 
 Not done yet: steps to the side shown in parts (they are instant);
 the planes farther than two and a half cells (a hall's far walls come
