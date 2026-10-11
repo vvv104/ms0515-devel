@@ -1,29 +1,27 @@
-/* view.c - the view from the party's eyes (view.h).
+/* view.c - the view from the party's eyes (view.h): the dungeon's
+ * edges, and nothing else.
  *
- * Two halves.  The first finds what each column of the sector shows:
- * the cells about the party gone through front to back, row by row
- * away from it, and each face of a wall takes the pixel columns not
- * yet taken, from a table of where every cell corner falls for every
- * phase of a step - in a row the faces towards the party first, then
- * the faces along the axis; a wall along the axis is one face however
- * many cells long, taken when it ends, or before a face that could
- * show past its beginning.  What a face leaves in a cell column is a
- * piece: the pixels it covers as a mask of eight, and which wall.
+ * Two halves.  The first finds what each pixel column of the sector
+ * shows: the cells about the party gone through front to back, row by
+ * row away from it, and each face of a wall takes the pixel columns
+ * not yet taken, from a table of where every cell corner falls for
+ * every phase of a step - in a row the faces towards the party first,
+ * then the faces along the axis; a wall along the axis is one face
+ * however many cells long, taken when it ends, or before a face that
+ * could show past its beginning.  What a face leaves in a cell column
+ * is a piece: the pixels it covers as a mask of eight, and which wall.
  *
- * The second draws the pieces, from numbers, not pictures.  A wall
- * along the axis stands 60 / r rows above and below the horizon at r
- * cells, a height every pixel column keeps while the party steps
- * along it.  Its outline and the three rows of mortar between its
- * four rows of bricks at the quarters of that height, the walls
- * across the axis with theirs, the floor and the ceiling, are composed
- * into a layer kept in memory - a column again only when its walls
- * change, and when a wall across the axis grows as the party comes
- * only the rows it takes or leaves - and the layer is copied to the
- * screen each pass.  Over it go what moves: the joints between the
- * bricks, where each falls at this phase, and the edges of the floor's
- * cells across.  A wall is red with black lines, the floor green, the
- * ceiling black; a cell row part wall and part floor is red and
- * green, with no black to spare. */
+ * The second draws the edges, in one colour on one: every seam of the
+ * world's squares, to the pixel.  A wall along the axis stands 60 / r
+ * rows above and below the horizon at r cells, a height every pixel
+ * column keeps while the party steps along it: its top and its foot
+ * are a pixel in each column, a line on a slant; the seams between
+ * its cells, and its ends, stand down it where the corners fall.  A
+ * wall across the axis is a frame.  The floor's cells have their edges
+ * across the axis, a row in each column, and along it, a slant like a
+ * wall's foot; the ceiling the same upside down.  What a wall hides
+ * is not drawn.  Nearer than DETAIL pixels to a line drawn no other
+ * is: far away the cells crowd, and only the first of a crowd shows. */
 
 #include <fx.h>
 #include <ms0515.h>
@@ -35,53 +33,24 @@
 #define MIDDLE (SECTOR_CELLS * 4)	/* the sector's middle pixel column */
 #define MAX_PIECES 4
 #define LATERALS PLANE_LATERALS		/* cells beside the axis looked at */
-#define BRICK 20			/* a brick's length along a wall, 40ths of a cell: half a cell, twice its height */
-/* The detail kept: no two lines nearer than DETAIL pixels, the first
- * of a crowd kept and the rest left out, so that something is always
- * drawn - else the far walls crowd into black.  A wall has its rows
- * of mortar when its brick rows are DETAIL rows tall; shorter, it
- * keeps the horizon's line, its top and foot (across the axis), its
- * corners and a joint a brick, the wall's height, down to DETAIL rows
- * tall, under which it is a fill.  Joints nearer than DETAIL along a
- * wall are left out, and the floor's lines along the axis nearer
- * than that to one another. */
-#define DETAIL 4
-#define DETAILED(half) ((half) >= 2 * DETAIL)	/* a wall tall enough for its mortar rows */
-#define WALL_ATTR (MS_PAPER(2) | MS_INK(0))
-#define FLOOR_ATTR (MS_PAPER(4) | MS_INK(0))
-#define CEILING_ATTR 0
-#define FAR_ATTR MS_INK(2)
-#define FAR_PIXELS 0x55			/* past the depth drawn: a dim bar on the horizon */
+#define DETAIL 4			/* no two lines nearer than this many pixels */
+#define PAPER (MS_PAPER(7) | MS_INK(0))	/* the one colour, and black for the lines */
 
-enum { kPlane, kFront, kFar };
-
-/* The compiler inlines a function called twice into both callers; the
- * program's room runs out before its time does, so the bigger ones
- * are kept as functions. */
-#define NOINLINE __attribute__((noinline))
+enum { kPlane, kFront };
 
 /* The pixel bits by position, and the masks of the pixels from one on
  * and up to one: tables, since the compiler's shift by a variable
- * count is the third trap (toolset README.md). */
+ * count is a trap (toolset README.md). */
 static const unsigned char bitAt[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
 static const unsigned char fromPixel[9] = {0xFF, 0x7F, 0x3F, 0x1F, 0x0F, 0x07, 0x03, 0x01, 0x00};
 static const unsigned char toPixel[9] = {0x00, 0x80, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC, 0xFE, 0xFF};
 
 struct piece {
 	unsigned char mask, kind;
-	union {				/* by the kind, to keep the pieces short */
-		struct {
-			unsigned char lateral, mirror;	/* kPlane: the plane, and which side (1: the right) */
-			unsigned char corners;	/* the pixels where the wall's corners stand */
-			int z0, z1;		/* the face's depths, 40ths of a cell past the party */
-		};
-		struct {
-			unsigned char top, bottom;	/* kFront, kFar: window rows, both in */
-			unsigned char half;	/* kFront: rows above the horizon */
-			signed char n, j;	/* kFront: the cell's row and lateral */
-			unsigned char corner;	/* kFront: the pixels where the wall's corners stand */
-		};
-	};
+	unsigned char lateral, mirror;	/* kPlane: the plane, and which side (1: the right) */
+	signed char from, through;	/* kPlane: the run's rows; kFront: the cell's row in `through` */
+	signed char j;			/* kFront: the cell's lateral */
+	unsigned char half;		/* kFront: rows above the horizon */
 };
 
 /* The columns of a range, at most the view's width: pieces[c - rangeFirst]. */
@@ -89,59 +58,24 @@ static struct piece pieces[VIEW_CELLS][MAX_PIECES];
 static unsigned char count[VIEW_CELLS];
 static unsigned char covered[VIEW_CELLS];
 
-/* The layer: the view's columns composed, a word a row as the screen
- * keeps them, a column at a time: a column goes up whole, with what
- * moves drawn into it and taken out again after. */
-static unsigned char layer[VIEW_CELLS][VIEW_ROWS][2] __attribute__((aligned(2)));	/* words: an even address */
-/* A column's rows of mortar and of floor lines while it is composed:
- * the pixels of each, and which rows were touched, to clear them after
- * - a clear of the whole is a byte at a time, dearer than the column. */
-unsigned char view_mortar[VIEW_ROWS], view_lines[VIEW_ROWS];	/* rows.s reads them */
-static unsigned char mortarRows[MAX_PIECES * 8 * 3], lineRows[LATERALS * 8];
-static int mortarN, lineN;
-
-static void setMortar(int row, unsigned char bit)
-{
-	if (!view_mortar[row])
-		mortarRows[mortarN++] = (unsigned char)row;
-	view_mortar[row] |= bit;
-}
-
-static void setLine(int row, unsigned char bit)
-{
-	if (!view_lines[row])
-		lineRows[lineN++] = (unsigned char)row;
-	view_lines[row] |= bit;
-}
-
-static void clearRows(void)
-{
-	while (mortarN > 0)
-		view_mortar[mortarRows[--mortarN]] = 0;
-	while (lineN > 0)
-		view_lines[lineRows[--lineN]] = 0;
-}
-
 static int cellX, cellY, phase;
 static int fx, fy, rx, ry;		/* the facing: forward and right, in cells */
-/* The phase's rows of the tables, taken once a pass: the multiplying
- * of indexes is the compiler's weak point. */
-static const unsigned char (*edgeNow)[PLANE_LATERALS + 1];	/* edge_px[phase] */
-static const unsigned char (*crossNow)[VIEW_CELLS];		/* cross_row[phase] */
-static const unsigned char *frontHalfNow;			/* front_half[phase] */
-extern int view_phase8;						/* phase_8[phase], joints.s's */
+static const unsigned char (*edgeNow)[PLANE_LATERALS];	/* edge_px[phase] */
+static const unsigned char (*crossNow)[SECTOR_CELLS];	/* cross_row[phase] */
+static const unsigned char *frontHalfNow;		/* front_half[phase] */
 static int rangeFirst, rangeLast, rangeBase, uncovered;
 #define IX(c) ((c) - rangeFirst + rangeBase)	/* sector column c's index in the range's tables */
 static int turnDir, turnFacing;		/* the turn in progress: the old facing's sector slides */
 static struct view turnView;
+static unsigned column[VIEW_ROWS];	/* the column drawn, a word a row: the pixels low, the attribute high */
 
 static void facing(int f)
 {
 	static const signed char dx[4] = {1, 0, -1, 0}, dy[4] = {0, 1, 0, -1};
 
-	fx = dx[f];
-	fy = dy[f];
-	rx = -fy;			/* the right hand of someone facing (fx, fy), y down the map */
+	fx = dx[f & 3];
+	fy = dy[f & 3];
+	rx = -fy;				/* the right hand of someone facing (fx, fy), y down the map */
 	ry = fx;
 }
 
@@ -205,17 +139,6 @@ static struct piece *last(int c)
 	return count[i] ? &pieces[i][count[i] - 1] : 0;
 }
 
-static void farPiece(int c, unsigned char mask)
-{
-	struct piece *p = take(c, mask);
-
-	if (p) {
-		p->kind = kFar;
-		p->top = HALF - 1;
-		p->bottom = HALF;
-	}
-}
-
 /* The columns a face of [x0, x1) touches inside the range. */
 static int columns(int x0, int x1, int *c0, int *c1)
 {
@@ -230,29 +153,11 @@ static int columns(int x0, int x1, int *c0, int *c1)
 	return *c0 <= *c1;
 }
 
-/* A face's corners - a line stands down each - are its left edge
- * (CORNER_LEFT, pixel x0) and its right (CORNER_RIGHT, pixel x1 - 1)
- * when the wall ends there: the pixels of those in column c, under
- * the mask the face takes. */
-#define CORNER_LEFT 1
-#define CORNER_RIGHT 2
-
-static unsigned char cornerPixels(int c, int x0, int x1, int corners, unsigned char m)
-{
-	unsigned char bits = 0;
-
-	if ((corners & CORNER_LEFT) && (x0 >> 3) == c)
-		bits |= bitAt[x0 & 7];
-	if ((corners & CORNER_RIGHT) && ((x1 - 1) >> 3) == c)
-		bits |= bitAt[(x1 - 1) & 7];
-	return bits & m;
-}
-
 /* A wall along the axis, `lateral` planes out on the left or (mirror)
- * the right, between pixel columns x0 and x1, from depth z0 to z1 in
- * 40ths of a cell past the party.  A column's last piece of the same
- * plane - the run of cells before - grows by these pixels. */
-NOINLINE static void sideFace(int x0, int x1, int lateral, int mirror, int z0, int z1, int corners)
+ * the right, between pixel columns x0 and x1, the cells of rows `from`
+ * to `through`.  A column's last piece of the same plane - the run of
+ * cells before - grows by these pixels. */
+static void sideFace(int x0, int x1, int lateral, int mirror, int from, int through)
 {
 	struct piece *p;
 	unsigned char m;
@@ -268,11 +173,10 @@ NOINLINE static void sideFace(int x0, int x1, int lateral, int mirror, int z0, i
 		if (p && p->kind == kPlane && p->lateral == lateral && p->mirror == mirror) {
 			cover(c, m);
 			p->mask |= m;
-			p->corners |= cornerPixels(c, x0, x1, corners, m);
-			if (z0 < p->z0)
-				p->z0 = z0;
-			if (z1 > p->z1)
-				p->z1 = z1;
+			if (from < p->from)
+				p->from = (signed char)from;
+			if (through > p->through)
+				p->through = (signed char)through;
 			continue;
 		}
 		p = take(c, m);
@@ -281,18 +185,15 @@ NOINLINE static void sideFace(int x0, int x1, int lateral, int mirror, int z0, i
 		p->kind = kPlane;
 		p->lateral = (unsigned char)lateral;
 		p->mirror = (unsigned char)mirror;
-		p->corners = cornerPixels(c, x0, x1, corners, m);
-		p->z0 = z0;
-		p->z1 = z1;
+		p->from = (signed char)from;
+		p->through = (signed char)through;
 	}
 }
 
 /* A wall across the axis: the near face of the cell j to the right
  * (left when j < 0), n rows ahead, between x0 and x1, as tall as its
- * depth allows in each column.  Its left edge is a corner of the wall
- * (CORNER_LEFT) unless the cell beside shows a face across too, the
- * right the same: a line stands there. */
-NOINLINE static void frontFace(int x0, int x1, int j, int n, int corners)
+ * depth allows in each column. */
+static void frontFace(int x0, int x1, int j, int n)
 {
 	struct piece *p;
 	unsigned char m;
@@ -307,28 +208,26 @@ NOINLINE static void frontFace(int x0, int x1, int j, int n, int corners)
 		p = take(c, m);
 		if (!p)
 			continue;
-		p->corner = cornerPixels(c, x0, x1, corners, m);
-		half = fx_mul8(frontHalfNow[n], col_cos[c]);
-		if (half < 1)
-			half = 1;
-		if (half > 255)
-			half = 255;
+		half = fx_mul8(frontHalfNow[n], col_cos[c] > 255 ? 255 : col_cos[c]);
 		p->kind = kFront;
-		p->half = (unsigned char)half;
-		p->n = (signed char)n;
+		p->half = (unsigned char)(half < 1 ? 1 : half > 255 ? 255 : half);
+		p->through = (signed char)n;
 		p->j = (signed char)j;
-		p->top = (unsigned char)(half > HALF ? 0 : HALF - half);
-		p->bottom = (unsigned char)(half > HALF ? VIEW_ROWS - 1 : HALF + half - 1);
 	}
 }
 
 /* The far edge of row n, lateral index L (cells 0.5 + L from the
  * axis), as a pixel column: to the right of the middle, or to the
  * left; row -1 is behind the party, past the sector's edge. */
-#define EDGE_RIGHT(n, L) ((n) < 0 ? SECTOR_CELLS * 8 : MIDDLE + edgeNow[n][L])
-#define EDGE_LEFT(n, L) ((n) < 0 ? 0 : MIDDLE - edgeNow[n][L])
-/* The far edge of row n in 40ths of a cell past the party. */
-#define DEPTH40(n) (((n) * 40 + 20) - phase * (40 / PLANE_PHASES))
+static int edgeRight(int n, int L)
+{
+	return n < 0 ? SECTOR_CELLS * 8 : MIDDLE + edgeNow[n][L];
+}
+
+static int edgeLeft(int n, int L)
+{
+	return n < 0 ? 0 : MIDDLE - edgeNow[n][L];
+}
 
 /* A wall along the axis is taken as one face, however many cells
  * long: the run of wall cells at lateral index L on side s (0 left, 1
@@ -338,38 +237,17 @@ NOINLINE static void frontFace(int x0, int x1, int j, int n, int corners)
  * nearer part. */
 static signed char runFrom[2][LATERALS];
 
-/* Whether the cell n rows ahead and j to the right is wall. */
-NOINLINE static int wallAt(int n, int j)
-{
-	int x = cellX, y = cellY;
-
-	x += fx > 0 ? n : fx < 0 ? -n : 0;
-	y += fy > 0 ? n : fy < 0 ? -n : 0;
-	x += rx > 0 ? j : rx < 0 ? -j : 0;
-	y += ry > 0 ? j : ry < 0 ? -j : 0;
-	return map_at(x, y);
-}
-
 static void flush(int s, int L, int through)
 {
-	int from = runFrom[s][L], j = s ? L + 1 : -(L + 1), corners = 0;
-	int near, far;
+	int from = runFrom[s][L];
 
 	if (from < 0)
 		return;
 	runFrom[s][L] = -1;
-	/* the run's ends are the wall's corners where floor lies before
-	 * it or past it; the party's own row has no near end, the depth
-	 * drawn no far one */
-	near = from > 0 && !wallAt(from - 1, j);
-	far = through < PLANE_DEPTH && !wallAt(through + 1, j);
-	if (s) {
-		corners = (far ? CORNER_LEFT : 0) | (near ? CORNER_RIGHT : 0);
-		sideFace(EDGE_RIGHT(through, L), EDGE_RIGHT(from - 1, L), L, 1, DEPTH40(from - 1), DEPTH40(through), corners);
-	} else {
-		corners = (near ? CORNER_LEFT : 0) | (far ? CORNER_RIGHT : 0);
-		sideFace(EDGE_LEFT(from - 1, L), EDGE_LEFT(through, L), L, 0, DEPTH40(from - 1), DEPTH40(through), corners);
-	}
+	if (s)
+		sideFace(edgeRight(through, L), edgeRight(from - 1, L), L, 1, from, through);
+	else
+		sideFace(edgeLeft(from - 1, L), edgeLeft(through, L), L, 0, from, through);
 }
 
 static void flushAll(int through)
@@ -386,7 +264,7 @@ static void flushAll(int through)
 static void frontFaces(int n, const unsigned char *walls, const unsigned char *before)
 {
 	const unsigned char *near = edgeNow[n - 1];	/* the row's near edge */
-	int j, k, flushed = 0, corners;
+	int j, flushed = 0;
 
 	for (j = -LATERALS; j <= LATERALS; j++) {
 		if (!walls[LATERALS + j] || before[LATERALS + j])
@@ -395,21 +273,12 @@ static void frontFaces(int n, const unsigned char *walls, const unsigned char *b
 			flushAll(n - 1);
 			flushed = 1;
 		}
-		/* a corner at an edge whose neighbour shows no face across:
-		 * floor there, or a wall along the axis running past */
-		corners = 0;
-		k = LATERALS + j - 1;
-		if (j > -LATERALS && (!walls[k] || before[k]))
-			corners |= CORNER_LEFT;
-		k = LATERALS + j + 1;
-		if (j < LATERALS && (!walls[k] || before[k]))
-			corners |= CORNER_RIGHT;
 		if (j == 0)
-			frontFace(MIDDLE - near[0], MIDDLE + near[0], j, n, corners);
+			frontFace(MIDDLE - near[0], MIDDLE + near[0], j, n);
 		else if (j > 0)
-			frontFace(MIDDLE + near[j - 1], MIDDLE + near[j], j, n, corners);
+			frontFace(MIDDLE + near[j - 1], j < LATERALS ? MIDDLE + near[j] : SECTOR_CELLS * 8, j, n);
 		else
-			frontFace(MIDDLE - near[-j], MIDDLE - near[-j - 1], j, n, corners);
+			frontFace(-j < LATERALS ? MIDDLE - near[-j] : 0, MIDDLE - near[-j - 1], j, n);
 	}
 }
 
@@ -468,361 +337,201 @@ static void visibility(int first, int last)
 			before[j] = walls[j];
 	}
 	flushAll(n - 1);
-	for (c = first; c <= last; c++)
-		if (covered[IX(c)] != 0xFF)
-			farPiece(c, (unsigned char)~covered[IX(c)]);
 }
 
-/* -- The layer: a column composed from its pieces --------------------- */
+/* -- The edges drawn ---------------------------------------------------- */
 
-/* A cell row some of whose pixels are wall and the rest floor has two
- * colours for three things: the wall's red is its paper, the floor's
- * green its ink, and the black of the lines waits for a row that is
- * wall throughout - else the floor came out black in triangles under
- * the wall's foot, where its slanting edge crosses a cell. */
-#define MIXED_ATTR (MS_PAPER(2) | MS_INK(4))
+/* The sector pixel columns of the pixels of column c as the tables
+ * have them: the left half's, mirrored for the right. */
+static unsigned char tx[8];
 
-/* The sector pixel column of pixel i of column c as the tables have
- * it: the left half's, mirrored for the right. */
-#define TABLE_X(c, i) (((c) << 3) + (i) < MIDDLE ? ((c) << 3) + (i) : 2 * MIDDLE - 1 - ((c) << 3) - (i))
-
-/* The rows of mortar between the brick rows, at the quarters of the
- * wall's height: a wall along the axis in sector pixel column x,
- * `lateral` planes out, noted for pixel `bit`. */
-static void planeMortar(int lateral, int x, unsigned char bit)
+static void tableX(int c)
 {
-	int half = wall_half[lateral][x];
+	int i, x = c << 3;
 
-	setMortar(HALF, bit);
-	if (!DETAILED(half))
+	for (i = 0; i < 8; i++, x++)
+		tx[i] = (unsigned char)(x < MIDDLE ? x : 2 * MIDDLE - 1 - x);
+}
+
+/* The wall's rows in each pixel of the column in hand: from top[i] to
+ * bottom[i]; the horizon's row and the one before it where no wall
+ * is.  lines: the pixels a line stands down, for the thinning. */
+static unsigned char top[8], bottom[8], lines;
+
+/* A black line down pixel i from row a to row b. */
+static void vline(int i, int a, int b)
+{
+	unsigned bit = bitAt[i];
+	unsigned *w = column + a;
+
+	for (; a <= b; a++)
+		*w++ |= bit;
+}
+
+/* A seam of the wall at sector pixel column x, if it falls in the
+ * piece's pixels of column c: a line down the wall there, unless one
+ * stands within DETAIL pixels already. */
+static void seam(int c, const struct piece *p, int x)
+{
+	int i, k;
+
+	if (x < 0 || x >= 2 * MIDDLE || (x >> 3) != c)
 		return;
-	if (HALF - half / 2 >= 0)
-		setMortar(HALF - half / 2, bit);
-	if (HALF + half / 2 < VIEW_ROWS)
-		setMortar(HALF + half / 2, bit);
-}
-
-/* The rows of a wall across the axis `half` rows tall that are lines:
- * its top and its foot, where it meets the ceiling and the floor, and
- * the three rows of mortar between its brick rows - none but the
- * horizon's when it is too short for the detail.  Into rows[], those
- * in the window; how many comes back. */
-static int frontRows(int half, int *rows)
-{
-	int n = 0;
-
-	rows[n++] = HALF;
-	if (half < DETAIL)
-		return n;
-	if (HALF - half >= 0)
-		rows[n++] = HALF - half;
-	if (HALF + half - 1 < VIEW_ROWS)
-		rows[n++] = HALF + half - 1;
-	if (!DETAILED(half))
-		return n;
-	if (HALF - half / 2 >= 0)
-		rows[n++] = HALF - half / 2;
-	if (HALF + half / 2 < VIEW_ROWS)
-		rows[n++] = HALF + half / 2;
-	return n;
-}
-
-/* Those of a wall across the axis, for its pixels. */
-static void frontMortar(const struct piece *p)
-{
-	int rows[5], n, i;
-
-	if (p->kind != kFront)
+	i = x & 7;
+	if (!(p->mask & bitAt[i]))
 		return;
-	n = frontRows(p->half, rows);
-	for (i = 0; i < n; i++)
-		setMortar(rows[i], p->mask);
+	for (k = i - DETAIL + 1; k < i + DETAIL; k++)
+		if (k >= 0 && k < 8 && (lines & bitAt[k]))
+			return;
+	lines |= bitAt[i];
+	vline(i, top[i], bottom[i]);
 }
 
-/* The mortar of all the column's pieces noted. */
-static void noteMortar(int c)
+/* Whether sector pixel column x shows a wall: a piece of its cell
+ * column has it.  Past the range looked at, taken as shown. */
+static int walled(int x)
 {
-	const struct piece *p = pieces[IX(c)];
-	int i, k, n = count[IX(c)];
+	int c = x >> 3;
 
-	for (i = 0; i < n; i++, p++) {
-		if (p->kind != kPlane) {
-			frontMortar(p);
-			continue;
-		}
-		for (k = 0; k < 8; k++)
-			if ((p->mask & bitAt[k]) && wall_top[p->lateral][TABLE_X(c, k)] != 255)
-				planeMortar(p->lateral, TABLE_X(c, k), bitAt[k]);
-	}
+	if (x < 0 || x >= 2 * MIDDLE || c < rangeFirst || c > rangeLast)
+		return 1;
+	return covered[IX(c)] & bitAt[x & 7];
 }
 
-/* Pixels `wall` of `rows` rows from the word at q, `stride` bytes
- * apart, the first being window row `row`, are wall, besides what
- * each row had: the fill, with the mortar's pixels where noted.  The
- * rest of a row is black above the horizon, the ink; below it green,
- * the ink again with the attribute for it, unless the row is wall
- * throughout.  A mixed row shows no mortar, so its pixels say exactly
- * what is wall.  In assembler (rows.s): the compiler made fifty
- * instructions of a row. */
-void wall_rows(unsigned char *q, int stride, int row, int rows, int wall);
-
-/* A plane piece's rows into the column being composed.  The tops of
- * the mask's pixels run one way (nearer pixels taller), so the wall's
- * pixels of a row are a prefix or a suffix of the mask, grown pixel by
- * pixel down the rows. */
-static void composePlane(const struct piece *p, int c, unsigned char *dst)
+/* A face's right edge, at pixel x1: a seam at the pixel before it,
+ * the face's last, unless a wall goes on at x1 - whose own left edge
+ * the seam is then, drawn once. */
+static void rightSeam(int c, const struct piece *p, int x1)
 {
-	unsigned char top[8], bit[8], inside = 0;
-	int n = 0, in = 0, out, i, x, row, next;
-	unsigned char *q;
-
-	/* The mask's pixels with a wall, nearest first: the order they
-	 * enter the wall down the rows, and leave it. */
-	for (i = 0; i < 8; i++) {
-		int k = p->mirror ? 7 - i : i;
-
-		if (!(p->mask & bitAt[k]))
-			continue;
-		x = TABLE_X(c, k);
-		if (wall_top[p->lateral][x] == 255)
-			continue;
-		top[n] = wall_top[p->lateral][x];
-		bit[n++] = bitAt[k];
-		planeMortar(p->lateral, x, bitAt[k]);
-	}
-	if (!n)
-		return;
-	q = dst + (top[0] << 1);
-	out = n - 1;				/* the farthest leaves first: the last in */
-	for (row = top[0]; row < VIEW_ROWS - top[0]; q += (next - row) << 1, row = next) {
-		while (in < n && top[in] == row)
-			inside |= bit[in++];
-		while (out >= 0 && VIEW_ROWS - top[out] == row)	/* a pixel's last row is 119 - its first */
-			inside &= (unsigned char)~bit[out--];
-		next = VIEW_ROWS - top[0];		/* the run to the next pixel's entering or leaving */
-		if (in < n && top[in] < next)
-			next = top[in];
-		if (out >= 0 && VIEW_ROWS - top[out] < next)
-			next = VIEW_ROWS - top[out];
-		wall_rows(q, 2, row, next - row, inside);
-	}
+	if (!walled(x1))
+		seam(c, p, x1 - 1);
 }
 
-/* A wall across the axis, or the far bar, into the column: its rows
- * all the mask's pixels, the mortar at the quarters of its height.
- * These are in the layer too, though they grow as the party steps,
- * so that the floor never shows where they stand. */
-static void composeFront(const struct piece *p, unsigned char *dst)
+/* A piece's wall into the column: the rows it stands over in each
+ * pixel, its top and its foot a pixel each, and its seams - its left
+ * edge, the edges between its cells, and its right edge where no wall
+ * goes on. */
+static void wall(int c, const struct piece *p)
 {
-	frontMortar(p);
-	wall_rows(dst + (p->top << 1), 2, p->top, p->bottom - p->top + 1, p->mask);
-}
-
-/* The far bar's dither, over everything. */
-static void composeFar(const struct piece *p, unsigned char *dst)
-{
-	unsigned char *q = dst + (p->top << 1);
-	int row;
-
-	for (row = p->top; row <= p->bottom; row++, q += 2)
-		q[0] |= FAR_PIXELS & p->mask;
-}
-
-/* The edges of the floor's cells along the axis, at every plane's
- * foot: where a wall at that plane would end, the line lies - the
- * same tables.  From the farthest plane's on, a line only DETAIL rows
- * or more below the one before, or below the horizon. */
-static void floorLines(int c)
-{
-	int L, i, x, half, last;
+	int i, half, n, x0, x1, L = p->lateral;
+	const unsigned char *near;
 
 	for (i = 0; i < 8; i++) {
-		x = TABLE_X(c, i);
-		last = HALF;
-		for (L = LATERALS - 1; L >= 0; L--) {
-			half = wall_half[L][x];
-			if (!half || HALF + half >= VIEW_ROWS || HALF + half < last + DETAIL)
-				continue;
-			last = HALF + half;
-			setLine(last, bitAt[i]);
-		}
-	}
-}
-
-/* Where column c's walls end below the horizon, from its pieces: the
- * first row that is floor throughout, and the last that is wall
- * throughout, HALF - 1 for none.  Every wall pixel's rows run from
- * above the horizon to its foot, so the rows wall throughout are
- * those above every foot, if every pixel has one. */
-struct extent { unsigned char floor, through; };
-
-static void extent(int c, struct extent *e)
-{
-	const struct piece *p = pieces[IX(c)];
-	unsigned char covered = 0;
-	int i, k, top, foot, n = count[IX(c)], floor = HALF - 1, through = VIEW_ROWS - 1;
-
-	for (i = 0; i < n; i++, p++) {
-		if (p->kind != kPlane) {
-			covered |= p->mask;
-			if (p->bottom > floor)
-				floor = p->bottom;
-			if (p->bottom < through)
-				through = p->bottom;
+		if (!(p->mask & bitAt[i]))
+			continue;
+		half = p->kind == kPlane ? wall_half[L][tx[i]] : p->half;
+		if (!half)
+			continue;
+		if (half > HALF) {
+			top[i] = 0;
+			bottom[i] = VIEW_ROWS - 1;
 			continue;
 		}
-		for (k = 0; k < 8; k++) {
-			if (!(p->mask & bitAt[k]))
-				continue;
-			top = wall_top[p->lateral][TABLE_X(c, k)];
-			if (top == 255)
-				continue;
-			covered |= bitAt[k];
-			foot = VIEW_ROWS - 1 - top;
-			if (foot > floor)
-				floor = foot;
-			if (foot < through)
-				through = foot;
-		}
+		top[i] = (unsigned char)(HALF - half);
+		bottom[i] = (unsigned char)(HALF + half - 1);
+		column[top[i]] |= bitAt[i];
+		column[bottom[i]] |= bitAt[i];
 	}
-	e->floor = (unsigned char)(floor + 1);
-	e->through = (unsigned char)(covered == 0xFF ? through : HALF - 1);
-}
-
-/* Column c of the sector composed at dst, a word a row: the ceiling,
- * the floor with its lines, the pieces over them. */
-void column_base(unsigned char *q);	/* rows.s: the ceiling and the floor with its lines */
-
-static void compose(int c, unsigned char *dst)
-{
-	const struct piece *p = pieces[IX(c)];
-	int i, n = count[IX(c)];
-
-	floorLines(c);
-	column_base(dst);
-	for (i = 0; i < n; i++)
-		if (p[i].kind == kPlane)
-			composePlane(&p[i], c, dst);
-		else
-			composeFront(&p[i], dst);
-	for (i = 0; i < n; i++)
-		if (p[i].kind == kFar)
-			composeFar(&p[i], dst);
-	clearRows();
-}
-
-/* One row of column c composed on its own at q, from its pieces: for
- * the rows a wall across the axis leaves as the party steps back.  The
- * floor's lines are to be noted before. */
-NOINLINE static void composeRow(int c, int row, unsigned char *q)
-{
-	const struct piece *p = pieces[IX(c)];
-	unsigned char wall = 0, mort = 0, far = 0;
-	int i, k, x, top, half, n = count[IX(c)];
-
-	q[0] = (unsigned char)(row < HALF ? 0 : view_lines[row]);
-	q[1] = row < HALF ? CEILING_ATTR : FLOOR_ATTR;
-	for (i = 0; i < n; i++, p++) {
-		if (p->kind != kPlane) {
-			if (row < p->top || row > p->bottom)
-				continue;
-			wall |= p->mask;
-			if (p->kind == kFar) {
-				far |= p->mask;
-			} else {
-				int rows[5], m = frontRows(p->half, rows), r;
-
-				for (r = 0; r < m; r++)
-					if (rows[r] == row)
-						mort |= p->mask;
-			}
-			continue;
+	if (p->kind == kPlane) {
+		if (p->mirror) {		/* on the right the run's near end is its right edge */
+			x0 = edgeRight(p->through, L);
+			x1 = edgeRight(p->from - 1, L);
+			for (n = p->through - 1; n >= p->from; n--)
+				seam(c, p, edgeRight(n, L));
+		} else {
+			x0 = edgeLeft(p->from - 1, L);
+			x1 = edgeLeft(p->through, L);
+			for (n = p->from; n < p->through; n++)
+				seam(c, p, edgeLeft(n, L));
 		}
-		for (k = 0; k < 8; k++) {
-			if (!(p->mask & bitAt[k]))
-				continue;
-			x = TABLE_X(c, k);
-			top = wall_top[p->lateral][x];
-			if (top == 255 || row < top || row > VIEW_ROWS - 1 - top)
-				continue;
-			wall |= bitAt[k];
-			half = wall_half[p->lateral][x];
-			if (row == HALF || (DETAILED(half) && (row == HALF - half / 2 || row == HALF + half / 2)))
-				mort |= bitAt[k];
-		}
-	}
-	if (!wall)
-		return;
-	if (wall == 0xFF || row < HALF) {
-		q[0] = (unsigned char)(~wall | mort);
-		q[1] = WALL_ATTR;
 	} else {
-		q[0] = (unsigned char)~wall;
-		q[1] = MIXED_ATTR;
+		near = edgeNow[p->through - 1];
+		if (p->j == 0) {
+			x0 = MIDDLE - near[0];
+			x1 = MIDDLE + near[0];
+		} else if (p->j > 0) {
+			x0 = MIDDLE + near[p->j - 1];
+			x1 = p->j < LATERALS ? MIDDLE + near[p->j] : 2 * MIDDLE;
+		} else {
+			x0 = -p->j < LATERALS ? MIDDLE - near[-p->j] : 0;
+			x1 = MIDDLE - near[-p->j - 1];
+		}
 	}
-	q[0] |= FAR_PIXELS & far;
+	seam(c, p, x0);
+	rightSeam(c, p, x1);
 }
 
-/* PROF, a build switch for measuring: 1 finds the pieces and paints
- * nothing, 2 paints the pieces found once and finds no more, 5 leaves
- * out the joints, 6 the layer's keeping up (the columns go up as they
- * were). */
-#ifndef PROF
-#define PROF 0
-#endif
-
-/* -- What moves: the joints, the floor's edges across ---------------- */
-
-/* What moves is drawn into the column before it goes up and taken out
- * after, so that the column goes up whole: the joints of the bricks
- * and the walls' corner lines as runs of rows with a pixel turned,
- * the floor's edges across as rows made black.  The finding of the
- * runs and the column's going up are joints.s, in assembler; the
- * rows of the floor's edges are found here. */
-void plane_joints(int mask, int mirror, int corners, int lateral, int c, int z0, int z1, int through);
-void front_joints(int mask, int corner, int half, int n, int j, int c, int through);
-void column_show(unsigned char *col, int screen);
-extern int view_runN, view_edgeN;
-extern unsigned char view_edgeRows[CROSS_DEPTH];
-_Static_assert(CROSS_DEPTH == 4 && HALF == 60 && BRICK == 20 && DETAIL == 4, "joints.s has these by number");
-
-/* The edges of the floor's cells across the axis in column c: a line
- * where each stands at this phase, down to the nearest wall's foot. */
-static void floorEdges(int c, int from)
+/* The floor's edges across the axis in the column, and the ceiling's
+ * upside down: the nearest first, each at least DETAIL rows from the
+ * one before, in the pixels where no wall stands over the row. */
+static void crossEdges(int c)
 {
-	const unsigned char *at = &crossNow[1][c - SECTOR_FIRST];	/* row n's entry, a row's worth on */
-	int n, row;
+	int n, r, i, last = VIEW_ROWS + DETAIL;
+	unsigned bits;
 
-	view_edgeN = 0;
-	for (n = 1; n <= CROSS_DEPTH; n++, at += VIEW_CELLS) {
-		row = *at;
-		if (row == 255)
+	for (n = 1; n <= CROSS_DEPTH; n++) {
+		r = crossNow[n][c];
+		if (r == 255)
 			continue;
-		if (row < from)
+		if (r > last - DETAIL)
+			continue;
+		last = r;
+		bits = 0;
+		for (i = 0; i < 8; i++)
+			if (r > bottom[i])
+				bits |= bitAt[i];
+		if (!bits)
 			break;
-		view_edgeRows[view_edgeN++] = (unsigned char)row;
+		column[r] |= bits;
+		column[VIEW_ROWS - 1 - r] |= bits;
 	}
 }
 
-/* Column c, composed at col, put up on screen column `screen` with
- * what moves on it: the joints of the walls along the axis and across
- * it, down to the last row wall throughout, and the floor's edges from
- * the first row floor throughout. */
-static void show(int c, unsigned char *col, int screen, const struct extent *e)
+/* The floor's edges along the axis in the column, and the ceiling's
+ * upside down: in each pixel the rows where the planes L + 0.5 aside
+ * meet the floor - a wall's foot, were a wall there - the nearest
+ * first, each at least DETAIL from the one before and from the wall's
+ * foot. */
+static void alongEdges(void)
 {
-	const struct piece *p;
-	int i;
+	int i, L, half, r, last;
 
-	view_runN = 0;
-	for (i = 0; i < count[IX(c)] && PROF != 5; i++) {
-		p = &pieces[IX(c)][i];
-		if (p->kind == kPlane && PROF != 7)
-			plane_joints(p->mask, p->mirror, p->corners, p->lateral, c, p->z0, p->z1, e->through);
-		else if (p->kind == kFront && PROF != 8)
-			front_joints(p->mask, p->corner, p->half, p->n, p->j, c, e->through);
+	for (i = 0; i < 8; i++) {
+		last = VIEW_ROWS + DETAIL;
+		for (L = 0; L < LATERALS; L++) {
+			half = wall_half[L][tx[i]];
+			if (!half)
+				continue;
+			r = HALF + half;
+			if (r >= VIEW_ROWS || r > last - DETAIL)
+				continue;
+			if (r <= bottom[i] + 1)	/* at the wall's foot it is the foot's own seam */
+				break;
+			last = r;
+			column[r] |= bitAt[i];
+			column[VIEW_ROWS - 1 - r] |= bitAt[i];
+		}
 	}
-	floorEdges(c, e->floor);
-	column_show(col, screen);
+}
+
+/* Sector column c drawn on screen column `screen` from its pieces. */
+static void draw(int c, int screen)
+{
+	int row, i;
+
+	for (row = 0; row < VIEW_ROWS; row++)
+		column[row] = (unsigned)PAPER << 8;
+	for (i = 0; i < 8; i++) {
+		top[i] = HALF;
+		bottom[i] = HALF - 1;
+	}
+	lines = 0;
+	tableX(c);
+	for (i = 0; i < count[IX(c)]; i++)
+		wall(c, &pieces[IX(c)][i]);
+	crossEdges(c);
+	alongEdges();
+	ms_vput(screen, VIEW_TOP, VIEW_ROWS, column);
 }
 
 /* -- The passes ------------------------------------------------------- */
@@ -835,168 +544,22 @@ static void place(const struct view *v)
 	edgeNow = edge_px[phase];
 	crossNow = cross_row[phase];
 	frontHalfNow = front_half[phase];
-	view_phase8 = phase_8[phase];
 	facing(v->facing);
-}
-
-/* What a column of the layer was composed from: its pieces, the pixels
- * and kind of each, the plane or the rows, and where its floor begins.
- * The depths change with every phase of a step and the joints alone
- * use them. */
-struct known { unsigned char mask, kind, a, b, half; };
-static struct known known[VIEW_CELLS][MAX_PIECES];
-static unsigned char knownCount[VIEW_CELLS];
-static struct extent extents[VIEW_CELLS];
-
-/* Whether column c's layer column was composed from its pieces: 0 when
- * it was; 1 when from the same walls along the axis, those across
- * having grown or shrunk since - rows to bring up to date; 2 when
- * from other walls - a column to compose again. */
-static int layerCompare(int c, int slot)
-{
-	const struct piece *p = pieces[IX(c)];
-	const struct known *k = known[slot];
-	int i, n = count[IX(c)], moved = 0;
-
-	if (n != knownCount[slot])
-		return 2;
-	for (i = 0; i < n; i++, p++, k++) {
-		if (p->kind != k->kind || p->mask != k->mask)
-			return 2;
-		if (p->kind == kPlane) {
-			if (p->lateral != k->a || p->mirror != k->b)
-				return 2;
-		} else if (p->top != k->a || p->bottom != k->b || (p->kind == kFront && p->half != k->half)) {
-			moved = 1;		/* the height alone moves when the wall overflows the window */
-		}
-	}
-	return moved;
-}
-
-static void layerNote(int c, int slot)
-{
-	const struct piece *p = pieces[IX(c)];
-	struct known *k = known[slot];
-	int i, n = count[IX(c)];
-
-	for (i = 0; i < n; i++, p++, k++) {
-		k->mask = p->mask;
-		k->kind = p->kind;
-		if (p->kind == kPlane) {
-			k->a = p->lateral;
-			k->b = p->mirror;
-			k->half = 0;
-		} else {
-			k->a = p->top;
-			k->b = p->bottom;
-			k->half = p->half;
-		}
-	}
-	knownCount[slot] = (unsigned char)n;
-	extent(c, &extents[slot]);
-}
-
-/* The column composed into the layer's slot, and noted. */
-NOINLINE static void layerColumn(int c, int slot)
-{
-	compose(c, layer[slot][0]);
-	layerNote(c, slot);
-}
-
-/* The three mortar rows of a wall across the axis `half` rows tall,
- * or none: into rows[]. */
-static int mortarRowsOf(int half, int *rows)
-{
-	return frontRows(half, rows);
-}
-
-/* The walls across the axis in column c grown or shrunk since its
- * layer column was composed: the rows they took made wall, the rows
- * they left composed again, the mortar moved; the rest of the column
- * as it was.  Then the column noted again. */
-NOINLINE static void layerFronts(int c, int slot)
-{
-	const struct piece *p = pieces[IX(c)];
-	const struct known *k = known[slot];
-	unsigned char (*col)[2] = layer[slot], *q;
-	int i, j, m, n = count[IX(c)], row, rows[5], noted = 0;
-
-	/* The rows taken need the other pieces' mortar, where one makes a
-	 * row wall throughout; the rows left need the floor's lines: the
-	 * one when the column has other pieces, the other when a wall
-	 * shrank. */
-	for (i = 0; i < n; i++, p++, k++) {
-		if (p->kind != kFront || (p->top == k->a && p->bottom == k->b && p->half == k->half))
-			continue;
-		if (!noted && n > 1) {
-			noteMortar(c);
-			noted = 1;
-		}
-		/* the old mortar rows still inside the wall: the fill again */
-		m = mortarRowsOf(k->half, rows);
-		for (j = 0; j < m; j++)
-			if (rows[j] >= p->top && rows[j] <= p->bottom)
-				col[rows[j]][0] &= (unsigned char)~p->mask;
-		/* the rows taken */
-		if (p->top < k->a)
-			wall_rows(col[p->top], 2, p->top, k->a - p->top, p->mask);
-		if (p->bottom > k->b)
-			wall_rows(col[k->b + 1], 2, k->b + 1, p->bottom - k->b, p->mask);
-		/* the rows left */
-		if (p->top > k->a || p->bottom < k->b) {
-			if (noted < 2) {
-				floorLines(c);
-				noted = 2;
-			}
-			for (row = k->a; row < p->top; row++)
-				composeRow(c, row, col[row]);
-			for (row = p->bottom + 1; row <= k->b; row++)
-				composeRow(c, row, col[row]);
-		}
-		/* the new mortar rows, where the row is wall throughout */
-		m = mortarRowsOf(p->half, rows);
-		for (j = 0; j < m; j++) {
-			if (rows[j] < 0 || rows[j] >= VIEW_ROWS)
-				continue;
-			q = col[rows[j]];
-			if (q[1] == WALL_ATTR)
-				q[0] |= p->mask;
-		}
-	}
-	clearRows();
-	layerNote(c, slot);
 }
 
 void view_invalidate(void)
 {
-	int c;
-
-	for (c = 0; c < VIEW_CELLS; c++)
-		knownCount[c] = 255;
 }
 
 void view_render(const struct view *v)
 {
-	static int found;
-	int c, slot, how;
+	int c;
 
-	if (!found)
-		view_invalidate();
 	place(v);
 	rangeBase = 0;
-	if (PROF != 2 || !found)
-		visibility(SECTOR_FIRST, SECTOR_FIRST + VIEW_CELLS - 1);
-	found = 1;
-	if (PROF == 1)
-		return;
-	for (c = SECTOR_FIRST, slot = 0; c < SECTOR_FIRST + VIEW_CELLS; c++, slot++) {
-		how = PROF == 6 && knownCount[slot] != 255 ? 0 : layerCompare(c, slot);
-		if (how == 2)
-			layerColumn(c, slot);
-		else if (how == 1)
-			layerFronts(c, slot);
-		show(c, layer[slot][0], VIEW_LEFT + slot, &extents[slot]);
-	}
+	visibility(SECTOR_FIRST, SECTOR_FIRST + VIEW_CELLS - 1);
+	for (c = SECTOR_FIRST; c < SECTOR_FIRST + VIEW_CELLS; c++)
+		draw(c, VIEW_LEFT + c - SECTOR_FIRST);
 }
 
 void view_turn_begin(const struct view *v, int dir)
@@ -1007,21 +570,11 @@ void view_turn_begin(const struct view *v, int dir)
 	turnFacing = (v->facing + dir) & 3;
 }
 
-/* Sector columns s0..s1 of the old facing - past its end, or before
- * its beginning, the new facing's sector - on screen columns from
- * `screen`.  A column of the new facing that the view will show when
- * the turn is over goes into the layer on its way, so that the layer
- * is whole then; the others pass through a column of their own. */
 /* A pass of a turn brings in TURN_COLUMNS columns, of the old facing's
  * sector, or of the new one's past its end (or before its beginning),
- * or some of each: the parts, each with its own facing, found and
- * composed before the picture slides, so that the slide and the new
- * columns go up together. */
+ * or some of each: the parts, each with its own facing. */
 #define TURN_COLUMNS 4
-struct part { int s0, s1, screen, base, facing; };
-static unsigned char brought[TURN_COLUMNS][VIEW_ROWS][2] __attribute__((aligned(2)));
-static unsigned char *broughtColumn[TURN_COLUMNS];	/* each column's place: the layer's, or brought[] */
-static struct extent broughtExtent[TURN_COLUMNS];
+struct part { int s0, s1, screen, facing, base; };
 
 /* Sector columns s0..s1, as counted on the old facing's sector, on the
  * screen from `screen`: one or two parts. */
@@ -1053,6 +606,7 @@ static int parts(int s0, int s1, int screen, struct part *out)
 	return 1;
 }
 
+/* A part placed: its facing's tables, its columns' pieces at `base`. */
 static void placePart(const struct part *p)
 {
 	struct view v = turnView;
@@ -1067,7 +621,7 @@ static void placePart(const struct part *p)
 void view_turn_pass(int pass)
 {
 	struct part part[2];
-	int n, i, c, k = 0, slot;
+	int n, i, c, k = 0;
 
 	if (turnDir > 0)			/* to the right: the picture slides left */
 		n = parts(SECTOR_FIRST + TURN_COLUMNS * pass + VIEW_CELLS - TURN_COLUMNS,
@@ -1075,27 +629,17 @@ void view_turn_pass(int pass)
 	else
 		n = parts(SECTOR_FIRST - TURN_COLUMNS * pass, SECTOR_FIRST - TURN_COLUMNS * pass + TURN_COLUMNS - 1,
 			  VIEW_LEFT, part);
-	/* found and composed first, each part's pieces in its own slots */
-	for (i = 0; i < n; i++) {
+	for (i = 0; i < n; i++) {		/* the pieces found first, each part's in its own slots */
 		part[i].base = k;
 		placePart(&part[i]);
 		visibility(part[i].s0, part[i].s1);
-		for (c = part[i].s0; c <= part[i].s1; c++, k++) {
-			slot = part[i].facing == turnFacing && c >= SECTOR_FIRST && c < SECTOR_FIRST + VIEW_CELLS
-				? c - SECTOR_FIRST : -1;
-			broughtColumn[k] = slot >= 0 ? layer[slot][0] : brought[k][0];
-			compose(c, broughtColumn[k]);
-			extent(c, &broughtExtent[k]);
-			if (slot >= 0)
-				layerNote(c, slot);
-		}
+		k += part[i].s1 - part[i].s0 + 1;
 	}
-	/* then the slide, and the columns put up with what moves on them */
 	ms_hscroll(VIEW_LEFT, VIEW_LEFT + VIEW_CELLS - 1, VIEW_TOP, VIEW_TOP + VIEW_ROWS - 1,
 		   turnDir > 0 ? -TURN_COLUMNS : TURN_COLUMNS);
-	for (i = 0, k = 0; i < n; i++) {
+	for (i = 0; i < n; i++) {		/* then the slide, and the columns drawn right after it */
 		placePart(&part[i]);
-		for (c = part[i].s0; c <= part[i].s1; c++, k++)
-			show(c, broughtColumn[k], part[i].screen + c - part[i].s0, &broughtExtent[k]);
+		for (c = part[i].s0; c <= part[i].s1; c++)
+			draw(c, part[i].screen + c - part[i].s0);
 	}
 }

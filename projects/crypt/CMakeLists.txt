@@ -46,14 +46,13 @@ art(image face4 face4)
 # wall's edge falls, as a header.
 set(GEOMETRY "${CMAKE_CURRENT_SOURCE_DIR}/art/geometry.py")
 set(GEOMETRY_H "${ART_DIR}/geometry.h")
-set(GEOMETRY_C "${ART_DIR}/geometry.c")
 add_custom_command(
-    OUTPUT  "${GEOMETRY_H}" "${GEOMETRY_C}"
+    OUTPUT  "${GEOMETRY_H}"
     COMMAND ${Python3_EXECUTABLE} "${GEOMETRY}" "${GEOMETRY_H}"
     DEPENDS "${GEOMETRY}"
-    COMMENT "the view's geometry: geometry.h and geometry.c"
+    COMMENT "the view's geometry: geometry.h"
     VERBATIM)
-add_custom_target(geometry DEPENDS "${GEOMETRY_H}" "${GEOMETRY_C}")
+add_custom_target(geometry DEPENDS "${GEOMETRY_H}")
 
 # The program must end under the video memory's window at 0100000, and
 # it nearly fills the room below: the view is compiled for speed (-O2,
@@ -61,7 +60,7 @@ add_custom_target(geometry DEPENDS "${GEOMETRY_H}" "${GEOMETRY_C}")
 # runs in a pass's loops - and the stack is 512 bytes, of which a run
 # through every move uses under 200.
 rt11_c_library(NAME art SOURCES ${ART} INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}")
-rt11_c_library(NAME engine SOURCES src/map.c src/view.c src/rows.s src/joints.s src/hud.c "${GEOMETRY_C}" INCLUDE src "${ART_DIR}")
+rt11_c_library(NAME engine SOURCES src/map.c src/view.c src/hud.c INCLUDE src "${ART_DIR}")
 set_source_files_properties(src/map.c src/hud.c src/main.c PROPERTIES COMPILE_OPTIONS "-Os")
 target_link_libraries(engine PUBLIC art)		# the screen round the view draws the party's faces
 add_dependencies(engine geometry)

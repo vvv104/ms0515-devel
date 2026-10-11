@@ -23,7 +23,7 @@
  * the picture and draws four columns, a step draws all twenty-two. */
 #ifndef PACE
 #define TURN_PACE 5			/* 10 a second: a quarter turn in four fifths of a second */
-#define STEP_PACE 5			/* 10 a second: a step in half a second */
+#define STEP_PACE 6			/* 8 a second, a step in three fifths of one: a pass takes near six frames in C for now */
 #define IDLE_PACE 2			/* standing: the keys looked at */
 #else
 #define TURN_PACE PACE			/* one pace for all, for measuring */

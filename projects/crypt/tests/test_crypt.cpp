@@ -4,13 +4,14 @@
  * The party begins at the west end of a corridor running east, a wall
  * along its north side all the way: the view's left wall, half a cell
  * from the party's axis.  On the cylinder the view is drawn on, that
- * wall's top edge in pixel column x stands 120 sin|theta| rows above
- * the horizon, theta the column's angle - the same sum the host drew
- * it by, done again here from the geometry alone.
+ * wall stands 120 sin|theta| rows above and below the horizon in pixel
+ * column x, theta the column's angle - the same sum the host made the
+ * tables by, done again here from the geometry alone.
  */
 
 #include "Crawl.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <sstream>
@@ -22,12 +23,13 @@ using namespace crypt;
 
 namespace {
 
-constexpr int kWarmUp = 200;     /* frames before the first key: the data loaded, the screen up */
+constexpr int kWarmUp = 200;     /* frames before the first key: the screen up */
 constexpr int kTurnPace = 5;     /* frames a pass of a turn takes (main.c TURN_PACE) */
-constexpr int kStepPace = 5;     /* of a step (STEP_PACE) */
+constexpr int kStepPace = 6;     /* of a step (STEP_PACE) */
 constexpr int kIdlePace = 2;
-constexpr int kStepPasses = 5;   /* a step's phases (planes.py PHASES) */
+constexpr int kStepPasses = 5;   /* a step's phases (geometry.py PHASES) */
 constexpr int kTurnPasses = 8;
+constexpr uint8_t kPaper = 0x38; /* the view's one colour: white, the lines black */
 
 /* Frames run until the view has stood still for a dozen of them: a
  * move over, whatever its pace. */
@@ -51,60 +53,71 @@ int lit(Crawl &crawl)
     return n;
 }
 
-/* Whether the pixel at view column x, window row r is not black. */
-bool coloured(Crawl &crawl, int x, int r)
+/* Whether the pixel at view column x, window row r is a line. */
+bool black(Crawl &crawl, int x, int r)
 {
-    const uint8_t *cell = crawl.cell(x >> 3, kViewTop + r);
-    const bool ink = cell[0] & (0x80 >> (x & 7));
-    const int colour = ink ? cell[1] & 7 : (cell[1] >> 3) & 7;
-    return colour != 0;
+    return crawl.cell(x >> 3, kViewTop + r)[0] & (0x80 >> (x & 7));
 }
 
-/* The colour of the pixel at view column x, window row r: 0 black,
- * 2 red, 4 green. */
-int colourAt(Crawl &crawl, int x, int r)
+constexpr double kPi = 3.14159265358979323846;
+
+/* The angle of view pixel column x, radians, 0 straight ahead,
+ * negative to the left; the view begins at sector pixel 40. */
+double angleOf(int x) { return (x + 40 + 0.5 - 128) * (kPi / 2) / 256; }
+
+/* Half the height of the left wall in view pixel column x, as the
+ * tables have it: 120 sin|theta| rounded, theta the column's angle;
+ * 0 where the ray meets the corridor's end first, 9.5 cells ahead at
+ * the start. */
+int wallHalf(int x)
 {
-    const uint8_t *cell = crawl.cell(x >> 3, kViewTop + r);
-    const bool ink = cell[0] & (0x80 >> (x & 7));
-    return ink ? cell[1] & 7 : (cell[1] >> 3) & 7;
+    const double theta = angleOf(x);
+    if (theta >= 0 || 0.5 / std::tan(-theta) > 9.5) return 0;
+    const int half = static_cast<int>(std::nearbyint(120 * std::sin(-theta)));
+    return half < 1 ? 1 : half;
 }
 
-/* The first window row of the pixel column that is not black, or -1. */
-int firstColoured(Crawl &crawl, int x)
+/* Whether a seam of the left wall - a cell's corner, n + 0.5 cells
+ * ahead and half a cell aside - falls in view pixel column x, as
+ * geometry.py puts the corners. */
+bool seamAt(int x)
 {
-    for (int r = 0; r < kViewRows; ++r)
-        if (coloured(crawl, x, r)) return r;
-    return -1;
-}
-
-/* Where the left wall's top edge should be in view pixel column x: a
- * wall half a cell from the axis, drawn to 24 cells deep. */
-int wallTop(int x)
-{
-    const double pi = 3.14159265358979323846;
-    const double theta = (x + 40 + 0.5 - 128) * (pi / 2) / 256;      /* the view begins at sector pixel 40 */
-    if (theta >= 0) return -1;
-    if (0.5 / std::tan(-theta) > 24) return -1;
-    const double half = 120 * std::sin(-theta);
-    const int row = static_cast<int>(std::floor(59.5 - half)) + 1;
-    return row < 0 ? 0 : row;
-}
-
-/* The walls' outline by cells: for each cell column of the view, the
- * first window row whose cell has a colour, ink or paper, and the last.
- * Blind to the texture - its black lines move as the party steps -
- * and so what a step must leave as it is. */
-std::vector<int> silhouette(Crawl &crawl)
-{
-    std::vector<int> rows;
-    for (int c = 0; c < kViewCells; ++c) {
-        int first = -1, last = -1;
-        for (int r = 0; r < kViewRows; ++r)
-            if (crawl.cell(c, kViewTop + r)[1] & 0x3F) { if (first < 0) first = r; last = r; }
-        rows.push_back(first);
-        rows.push_back(last);
+    for (int n = 0; n <= 16; ++n) {
+        const int px = static_cast<int>(std::lround(std::atan2(0.5, n + 0.5) * 256 / (kPi / 2)));
+        if (128 - std::min(px, 128) - 40 == x) return true;
     }
-    return rows;
+    return false;
+}
+
+/* The cosine of the middle of view column c in 8.8, as the tables
+ * have it, at most 255 as the machine takes it. */
+int cosineOf(int c)
+{
+    const int cosine = static_cast<int>(std::lround(256 * std::cos(angleOf(c * 8 + 3))));
+    return cosine > 255 ? 255 : cosine;
+}
+
+/* The window row where the far edge of row n's cells crosses the
+ * floor in view column c at the start, as geometry.py has it. */
+int crossRow(int c, int n)
+{
+    const double r = (n + 0.5) / std::cos(angleOf(c * 8 + 3));
+    return 60 + static_cast<int>(std::lround(60 / r));
+}
+
+/* Where two views differ, for a message. */
+std::string differences(const std::vector<uint8_t> &a, const std::vector<uint8_t> &b)
+{
+    std::ostringstream where;
+    int n = 0;
+    for (std::size_t i = 0; i < a.size(); i += 2)
+        if ((a[i] != b[i] || a[i + 1] != b[i + 1]) && n++ < 12) {
+            char cell[40];
+            std::snprintf(cell, sizeof cell, " c%dr%d:%02X/%02X>%02X/%02X", static_cast<int>((i / 2) % kViewCells),
+                          static_cast<int>((i / 2) / kViewCells), a[i], a[i + 1], b[i], b[i + 1]);
+            where << cell;
+        }
+    return std::to_string(n) + where.str();
 }
 
 /* The program says on its way out how many passes of its loop it made
@@ -130,204 +143,90 @@ Tally tally(Crawl &crawl)
 
 TEST_SUITE("CRYPT") {
 
-TEST_CASE("the screen: the view with walls, the band, the party, the buttons") {
+TEST_CASE("the screen: the view's edges, the band, the party, the buttons") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
     REQUIRE_FALSE(crawl.machine.ended());
     CHECK(crawl.machine.graphics());
     CHECK_FALSE(crawl.machine.emulator().isHires());
-    CHECK(lit(crawl) > 100);                            /* the walls' lines and outlines, the floor's */
+    CHECK(lit(crawl) > 100);                            /* the edges */
+    for (int c = 0; c < kViewCells; c += 7)
+        for (int r = 0; r < kViewRows; r += 17) { CAPTURE(c); CAPTURE(r); CHECK(crawl.cell(c, kViewTop + r)[1] == kPaper); }
     CHECK(crawl.cell(1, 0)[1] == 0x0F);                 /* the band's text: white on blue */
     CHECK(crawl.cell(23, 45)[1] == 0x76);               /* a face: bright yellow, the head's own cell */
     CHECK(crawl.cell(22, 62)[1] == 0x42);               /* a full hit-point bar: bright red */
     CHECK(crawl.cell(2, 150)[1] == 0x4E);               /* a button's yellow label on bright blue */
 }
 
-TEST_CASE("the left wall's top edge runs straight to the horizon, pixel by pixel") {
+TEST_CASE("the left wall's top and foot run straight to the horizon, pixel by pixel") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
     REQUIRE_FALSE(crawl.machine.ended());
-    /* The edge is where the sum says in every column but those where
-     * the texture's own black lines - the mortar between bricks, a
-     * pixel in thirty-two - run down from it; the wall never stands
-     * above the edge. */
-    int exact = 0;
-    std::ostringstream seen;
+    /* In every pixel column of the left wall its top edge is the pixel
+     * at row 60 - half and its foot the pixel at 59 + half, and the
+     * pixel between them on the horizon is clear - the wall is one
+     * colour, only its edges drawn. */
+    int columns = 0;
     for (int x = 0; x < 80; ++x) {
-        const int expected = wallTop(x), got = firstColoured(crawl, x);
-        seen << x << ":" << got << "/" << expected << " ";
-        CAPTURE(x); CAPTURE(expected); CAPTURE(got);
-        REQUIRE(expected >= 0);
-        CHECK(got >= expected);
-        exact += got == expected;
+        const int half = wallHalf(x);
+        if (half == 0 || half > 60) continue;
+        CAPTURE(x); CAPTURE(half);
+        CHECK(black(crawl, x, 60 - half));
+        CHECK(black(crawl, x, 59 + half));
+        if (half > 2 && !seamAt(x)) CHECK_FALSE(black(crawl, x, 60));
+        ++columns;
     }
-    MESSAGE("column: the first row seen / expected - " << seen.str());
-    CHECK(exact >= 72);
+    CHECK(columns > 60);
 }
 
-TEST_CASE("the bricks: three rows of mortar at the quarters of the wall, joints between, the floor's edges") {
+TEST_CASE("every seam is a line: the cells' corners down the wall, the floor's and the ceiling's edges") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
     REQUIRE_FALSE(crawl.machine.ended());
-    /* The middle row of mortar lies on the horizon, row 60 of the
-     * window, along the whole left wall: black, with the wall's red
-     * right under it - but where a joint runs down. */
-    int black = 0, redBelow = 0;
-    for (int x = 0; x < 80; ++x) {
-        black += !coloured(crawl, x, 60);
-        redBelow += coloured(crawl, x, 61);
+    /* The corners of the left wall's cells fall where geometry.py's
+     * edge_px says: half a cell ahead and aside, 52 pixel columns left
+     * of the sector's middle, view pixel 36; a cell and a half ahead,
+     * 32 columns left, pixel 56.  A line stands down the wall there,
+     * between its top and its foot; between the corners, none. */
+    for (int x : {36, 56}) {
+        const int half = wallHalf(x);
+        for (int r = 61 - half; r < 59 + half; ++r) { CAPTURE(x); CAPTURE(r); CHECK(black(crawl, x, r)); }
     }
-    CHECK(black == 80);
-    CHECK(redBelow >= 60);
-    /* The rows of mortar above and below, at the quarters of the
-     * wall's height in that column - 120 sin(theta) rows above and
-     * below the horizon - and the red of the bricks between. */
-    const auto half = [](int x) {
-        return static_cast<int>(std::lround(120 * std::sin(-(x + 40 + 0.5 - 128) * 3.14159265358979323846 / 2 / 256)));
-    };
-    for (int x : {8, 24, 40}) {
-        CAPTURE(x);
-        CHECK_FALSE(coloured(crawl, x, 60 - half(x) / 2));
-        CHECK_FALSE(coloured(crawl, x, 60 + half(x) / 2));
-        CHECK(coloured(crawl, x, 60 - half(x) / 4));
-        CHECK(coloured(crawl, x, 60 + half(x) / 4));
-    }
-    /* Joints: black pixels in the brick rows of the near wall, more
-     * than the mortar alone; and at least one full black row across a
-     * floor cell - the edge of a cell of the floor. */
-    int joints = 0;
-    for (int x = 0; x < 48; ++x) {                     /* a joint: black down the second brick row */
-        bool down = true;
-        for (int r = 44; r <= 56 && down; ++r) down = !coloured(crawl, x, r);
-        joints += down;
-    }
-    CHECK(joints >= 1);
-    CHECK(joints <= 6);
-    int edges = 0;
-    for (int r = 100; r < kViewRows; ++r) edges += crawl.cell(10, kViewTop + r)[0] == 0xFF;
-    CHECK(edges >= 1);
-}
-
-TEST_CASE("the wall's foot meets the floor: no black under it but the floor's own lines") {
-    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
-    Crawl crawl;
-    crawl.run(kWarmUp);
-    REQUIRE_FALSE(crawl.machine.ended());
-    /* Under the left wall's foot in pixel column x - its top edge's
-     * row from the bottom - every pixel is the floor's green, or black
-     * across the whole cell: the edge of a floor cell.  The wall's
-     * edge crosses a cell in a slant, and the cell's rows that are part
-     * wall and part floor have no black to spare for triangles. */
-    int checked = 0;
-    for (int x = 3; x < 48; ++x) {
-        const int top = wallTop(x);
-        if (top < 1) continue;
-        for (int r = kViewRows - top + 1; r < kViewRows; ++r) {
-            const int colour = colourAt(crawl, x, r);
-            const bool edge = crawl.cell(x >> 3, kViewTop + r)[0] == 0xFF;
-            CAPTURE(x); CAPTURE(r); CAPTURE(colour);
-            CHECK((colour == 4 || edge));
-            ++checked;
+    for (int r = 40; r < 80; r += 5) { CAPTURE(r); CHECK_FALSE(black(crawl, 46, r)); }
+    /* The floor's nearest edge across runs as a row through each
+     * column, bowing a little from column to column as the cylinder
+     * has it, right up to the wall's foot and not into the wall; the
+     * ceiling's is its mirror. */
+    for (int c = 0; c < 11; ++c) {
+        const int row = crossRow(c, 1);
+        for (int x = c * 8; x < c * 8 + 8; ++x) {
+            const int half = wallHalf(x);
+            CAPTURE(x); CAPTURE(row);
+            if (half == 0 || 59 + half < row) {
+                CHECK(black(crawl, x, row));
+                CHECK(black(crawl, x, 119 - row));
+            } else if (59 + half > row && !seamAt(x)) {
+                CHECK_FALSE(black(crawl, x, row));
+            }
         }
     }
-    CHECK(checked > 200);
 }
 
-TEST_CASE("two steps on and two back leave the picture as it was drawn afresh") {
-    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
-    Crawl crawl;
-    crawl.run(kWarmUp);
-    const auto start = crawl.view();
-    /* The walls ahead grow as the party comes and shrink as it goes
-     * back, the layer's columns brought up to date row by row; back
-     * on the first cell the picture is the one composed whole. */
-    for (int i = 0; i < 2; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }
-    CHECK(crawl.view() != start);
-    crawl.png("twoOn");
-    for (int i = 0; i < 2; ++i) { crawl.tap(ms0515::Key::Down); settle(crawl); }
-    crawl.png("twoBack");
-    {
-        const auto back = crawl.view();
-        std::ostringstream where;
-        int n = 0;
-        for (std::size_t i = 0; i < back.size(); i += 2)
-            if ((back[i] != start[i] || back[i + 1] != start[i + 1]) && n++ < 12) {
-                char cell[40];
-                std::snprintf(cell, sizeof cell, " c%dr%d:%02X/%02X>%02X/%02X", static_cast<int>((i / 2) % kViewCells),
-                              static_cast<int>((i / 2) / kViewCells), start[i], start[i + 1], back[i], back[i + 1]);
-                where << cell;
-            }
-        MESSAGE("back on the first cell, cells differing from the start: " << n << where.str());
-    }
-    CHECK(crawl.view() == start);
-}
-
-TEST_CASE("up to the wall ahead: its corners lined, its mortar following, a turn there and back changing nothing") {
-    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
-    Crawl crawl;
-    crawl.run(kWarmUp);
-    for (int i = 0; i < 8; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }
-    crawl.png("wallTwo");
-    /* Two cells from the wall ahead it is 80 rows tall in the middle
-     * column, with mortar at the quarters.  On the left the corridor's
-     * wall meets it in a corner, and a line stands down the corner at
-     * view pixel 36, where the face across ends, with no joint of the
-     * side wall beside it; on the right the corridor's wall ends a cell
-     * before, and the wall across goes on flat past pixel 139: no
-     * line there. */
-    for (int r : {40, 60, 80}) CHECK_FALSE(coloured(crawl, 84, r));
-    for (int r : {30, 50, 70, 90}) CHECK(coloured(crawl, 84, r));
-    /* Its bricks are half a cell wide, as the side walls' are: across
-     * its face, two and a half cells wide at this distance, a brick
-     * row has two joints, or three. */
-    int joints = 0;
-    for (int x = 38; x < 138; ++x) joints += !coloured(crawl, x, 50) && !coloured(crawl, x, 49) && !coloured(crawl, x, 51);
-    CHECK(joints >= 2);
-    CHECK(joints <= 3);
-    for (int r = 24; r <= 96; ++r) { CAPTURE(r); CHECK_FALSE(coloured(crawl, 36, r)); }
-    for (int r = 24; r <= 40; ++r) {
-        CAPTURE(r);
-        CHECK(coloured(crawl, 35, r));
-        CHECK(coloured(crawl, 38, r));
-        CHECK(coloured(crawl, 139, r));
-    }
-    /* One cell from it the wall overflows the window: the top row and
-     * the horizon are mortar, nothing else in the middle column is
-     * black - the mortar of the step before has not stayed behind. */
-    crawl.tap(ms0515::Key::Up); settle(crawl);
-    crawl.png("wallOne");
-    CHECK_FALSE(coloured(crawl, 84, 0));
-    CHECK_FALSE(coloured(crawl, 84, 60));
-    for (int r = 1; r < kViewRows; ++r) {
-        if (r == 60) continue;
-        CAPTURE(r);
-        CHECK(coloured(crawl, 84, r));
-    }
-    /* A turn away and back: the picture as it was. */
-    const auto at = crawl.view();
-    crawl.tap(ms0515::Key::Left); settle(crawl);
-    crawl.tap(ms0515::Key::Right); settle(crawl);
-    crawl.png("wallBack");
-    CHECK(crawl.view() == at);
-}
-
-TEST_CASE("a step forward runs the joints along the walls and moves nothing else") {
+TEST_CASE("a step forward runs the seams along the walls and moves no edge") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
     crawl.png("start");
     const auto still = crawl.view();
-    const auto outline = silhouette(crawl);
     crawl.run(10);
     CHECK(crawl.view() == still);                       /* nothing moves on its own */
 
     /* The frames of the step, each kept when the screen stood still
-     * over a frame: the walls' outline never moves in a step, however
-     * the texture runs - but for the far end of the corridor, which
-     * comes nearer, in the middle columns. */
+     * over a frame: the walls' top and foot never move in a step,
+     * however the seams run. */
     crawl.tap(ms0515::Key::Up);
     int changes = 0;
     auto before = crawl.view();
@@ -335,12 +234,12 @@ TEST_CASE("a step forward runs the joints along the walls and moves nothing else
         crawl.run(1);
         auto now = crawl.view();
         if (now == before) {
-            const auto seen = silhouette(crawl);
-            for (int c = 0; c < kViewCells; ++c) {
-                if (c >= 9 && c <= 12) continue;
-                CAPTURE(f); CAPTURE(c);
-                CHECK(seen[2 * c] == outline[2 * c]);
-                CHECK(seen[2 * c + 1] == outline[2 * c + 1]);
+            for (int x = 4; x < 64; x += 3) {
+                const int half = wallHalf(x);
+                if (half == 0 || half > 60) continue;
+                CAPTURE(f); CAPTURE(x);
+                CHECK(black(crawl, x, 60 - half));
+                CHECK(black(crawl, x, 59 + half));
             }
         } else {
             ++changes;
@@ -352,6 +251,63 @@ TEST_CASE("a step forward runs the joints along the walls and moves nothing else
     CHECK(crawl.view() != still);                       /* a cell on: the end of the corridor nearer */
     CHECK(crawl.cell(20, 168)[1] == 0x46);              /* the map: the party's arrow, yellow */
     CHECK(crawl.cell(20, 168)[0] != 0);
+}
+
+TEST_CASE("two steps on and two back leave the picture as it was") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    const auto start = crawl.view();
+    for (int i = 0; i < 2; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }
+    CHECK(crawl.view() != start);
+    crawl.png("twoOn");
+    for (int i = 0; i < 2; ++i) { crawl.tap(ms0515::Key::Down); settle(crawl); }
+    crawl.png("twoBack");
+    MESSAGE("back on the first cell, cells differing from the start: " << differences(start, crawl.view()));
+    CHECK(crawl.view() == start);
+}
+
+TEST_CASE("up to the wall ahead: a frame, its corners where the side walls end, and a turn there and back") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    for (int i = 0; i < 8; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }
+    crawl.png("wallTwo");
+    /* Two cells from the wall ahead it is a frame: its top row and
+     * its foot row across the middle columns, and its sides down view
+     * pixels 36 and 139, where the side walls' last cells end - the
+     * cell's near corners, 52 pixel columns either side of the middle
+     * (geometry.py edge_px). */
+    for (int c = 5; c < 17; ++c) {                     /* front_half 40 by each column's cosine */
+        const int half = (40 * cosineOf(c)) >> 8;
+        for (int x = c * 8; x < c * 8 + 8; x += 3) {
+            CAPTURE(x); CAPTURE(half);
+            CHECK(black(crawl, x, 60 - half));
+            CHECK(black(crawl, x, 59 + half));
+        }
+    }
+    /* Its left edge is the seam at pixel 36, where the left wall's last
+     * cell ends; on the right the corridor opens, and the wall ahead
+     * goes on past the opening as another cell's face: the seam between
+     * the two at pixel 140, the first of the next face. */
+    const int half = (40 * cosineOf(4)) >> 8;
+    for (int r = 61 - half; r < 59 + half; ++r) {
+        CAPTURE(r);
+        CHECK(black(crawl, 36, r));
+        CHECK(black(crawl, 140, r));
+        CHECK_FALSE(black(crawl, 37, r));
+        CHECK_FALSE(black(crawl, 139, r));
+        CHECK_FALSE(black(crawl, 141, r));
+    }
+    /* A step on and a turn away and back: the picture as it was. */
+    crawl.tap(ms0515::Key::Up); settle(crawl);
+    crawl.png("wallOne");
+    const auto at = crawl.view();
+    crawl.tap(ms0515::Key::Left); settle(crawl);
+    crawl.tap(ms0515::Key::Right); settle(crawl);
+    crawl.png("wallBack");
+    MESSAGE("back from the turn, cells differing: " << differences(at, crawl.view()));
+    CHECK(crawl.view() == at);
 }
 
 TEST_CASE("a turn slides the picture four columns a pass; four of them come round to the start") {
@@ -387,26 +343,11 @@ TEST_CASE("a turn slides the picture four columns a pass; four of them come roun
                     return false;
         return true;
     };
-    /* How many cells of the overlap differ when the frame before is
-     * moved by `cells`: 0 for a clean slide. */
-    const auto differing = [&](const std::vector<uint8_t> &now, const std::vector<uint8_t> &before, int cells) {
-        int n = 0;
-        for (int y = 0; y < kViewRows; ++y)
-            for (int c = 0; c < kViewCells - cells; ++c)
-                n += now[(y * kViewCells + c) * 2] != before[(y * kViewCells + c + cells) * 2] ||
-                     now[(y * kViewCells + c) * 2 + 1] != before[(y * kViewCells + c + cells) * 2 + 1];
-        return n;
-    };
     int slides = 0;
     for (std::size_t i = 1; i < frames.size(); ++i) {
         CAPTURE(i);
         bool slid = false;
         for (int k = 4; k <= 20 && !slid; k += 4) slid = slidBy(frames[i], frames[i - 1], k);
-        if (!slid) {
-            std::ostringstream what;
-            for (int k = 0; k <= 20; k += 4) what << " by " << k << ": " << differing(frames[i], frames[i - 1], k);
-            MESSAGE("frame " << i << " against the one before, cells differing" << what.str());
-        }
         CHECK(slid);
         slides += slid;
     }
@@ -417,19 +358,7 @@ TEST_CASE("a turn slides the picture four columns a pass; four of them come roun
 
     crawl.tap(ms0515::Key::Left);                       /* and back: the start again */
     settle(crawl);
-    {
-        const auto back = crawl.view();
-        std::ostringstream where;
-        int n = 0;
-        for (std::size_t i = 0; i < back.size(); i += 2)
-            if ((back[i] != start[i] || back[i + 1] != start[i + 1]) && n++ < 12) {
-                char cell[40];
-                std::snprintf(cell, sizeof cell, " c%dr%d:%02X/%02X>%02X/%02X", static_cast<int>((i / 2) % kViewCells),
-                              static_cast<int>((i / 2) / kViewCells), start[i], start[i + 1], back[i], back[i + 1]);
-                where << cell;
-            }
-        MESSAGE("back from the turn, cells differing from the start: " << n << where.str());
-    }
+    MESSAGE("back from the turn, cells differing from the start: " << differences(start, crawl.view()));
     CHECK(crawl.view() == start);
     crawl.tap(ms0515::Key::Right);
     settle(crawl);
@@ -438,7 +367,7 @@ TEST_CASE("a turn slides the picture four columns a pass; four of them come roun
         crawl.tap(ms0515::Key::Right);
         settle(crawl);
     }
-    MESSAGE("round the four quarters, cells differing from the start: " << differing(crawl.view(), start, 0));
+    MESSAGE("round the four quarters, cells differing from the start: " << differences(start, crawl.view()));
     CHECK(crawl.view() == start);
 }
 
