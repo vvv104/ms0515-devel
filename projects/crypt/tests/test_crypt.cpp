@@ -60,6 +60,15 @@ bool coloured(Crawl &crawl, int x, int r)
     return colour != 0;
 }
 
+/* The colour of the pixel at view column x, window row r: 0 black,
+ * 2 red, 4 green. */
+int colourAt(Crawl &crawl, int x, int r)
+{
+    const uint8_t *cell = crawl.cell(x >> 3, kViewTop + r);
+    const bool ink = cell[0] & (0x80 >> (x & 7));
+    return ink ? cell[1] & 7 : (cell[1] >> 3) & 7;
+}
+
 /* The first window row of the pixel column that is not black, or -1. */
 int firstColoured(Crawl &crawl, int x)
 {
@@ -202,6 +211,60 @@ TEST_CASE("the bricks: three rows of mortar at the quarters of the wall, joints 
     CHECK(edges >= 1);
 }
 
+TEST_CASE("the wall's foot meets the floor: no black under it but the floor's own lines") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    REQUIRE_FALSE(crawl.machine.ended());
+    /* Under the left wall's foot in pixel column x - its top edge's
+     * row from the bottom - every pixel is the floor's green, or black
+     * across the whole cell: the edge of a floor cell.  The wall's
+     * edge crosses a cell in a slant, and the cell's rows that are part
+     * wall and part floor have no black to spare for triangles. */
+    int checked = 0;
+    for (int x = 3; x < 48; ++x) {
+        const int top = wallTop(x);
+        if (top < 1) continue;
+        for (int r = kViewRows - top + 1; r < kViewRows; ++r) {
+            const int colour = colourAt(crawl, x, r);
+            const bool edge = crawl.cell(x >> 3, kViewTop + r)[0] == 0xFF;
+            CAPTURE(x); CAPTURE(r); CAPTURE(colour);
+            CHECK((colour == 4 || edge));
+            ++checked;
+        }
+    }
+    CHECK(checked > 200);
+}
+
+TEST_CASE("two steps on and two back leave the picture as it was drawn afresh") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    const auto start = crawl.view();
+    /* The walls ahead grow as the party comes and shrink as it goes
+     * back, the layer's columns brought up to date row by row; back
+     * on the first cell the picture is the one composed whole. */
+    for (int i = 0; i < 2; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }
+    CHECK(crawl.view() != start);
+    crawl.png("twoOn");
+    for (int i = 0; i < 2; ++i) { crawl.tap(ms0515::Key::Down); settle(crawl); }
+    crawl.png("twoBack");
+    {
+        const auto back = crawl.view();
+        std::ostringstream where;
+        int n = 0;
+        for (std::size_t i = 0; i < back.size(); i += 2)
+            if ((back[i] != start[i] || back[i + 1] != start[i + 1]) && n++ < 12) {
+                char cell[40];
+                std::snprintf(cell, sizeof cell, " c%dr%d:%02X/%02X>%02X/%02X", static_cast<int>((i / 2) % kViewCells),
+                              static_cast<int>((i / 2) / kViewCells), start[i], start[i + 1], back[i], back[i + 1]);
+                where << cell;
+            }
+        MESSAGE("back on the first cell, cells differing from the start: " << n << where.str());
+    }
+    CHECK(crawl.view() == start);
+}
+
 TEST_CASE("a step forward runs the joints along the walls and moves nothing else") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
@@ -299,6 +362,7 @@ TEST_CASE("a turn slides the picture four columns a pass; four of them come roun
         slides += slid;
     }
     CHECK(slides + 1 == static_cast<int>(frames.size()));
+    settle(crawl);
     CHECK(crawl.view() != start);
     const auto turned = crawl.view();
 

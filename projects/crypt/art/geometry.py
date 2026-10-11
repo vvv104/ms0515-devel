@@ -49,7 +49,7 @@ FOCUS = 120.0                 # pixels a cell is tall a cell away
 PHASES = 5                    # passes a step takes: the party at k/PHASES
 LATERALS = 3                  # planes beside the axis: 0.5, 1.5, 2.5 cells out
 DEPTH = 16                    # cells a wall is drawn to
-CROSS_DEPTH = 8               # cells the floor's edges across are drawn to: past that, a row apart or less
+CROSS_DEPTH = 4               # cells the floor's edges across are drawn to: past that they crowd into a block
 
 
 def angle(x):

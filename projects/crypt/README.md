@@ -75,36 +75,56 @@ mortar at the quarters of its height, and the joints between the
 bricks - half a cell long, a quarter tall, the rows laid by turns -
 where each falls at this phase.  The floor is green with the edges of
 its cells drawn over: along the axis, at every plane's foot, and
-across it, where each stands at this phase; the ceiling is black.
+across it, where each stands at this phase, to four cells - farther
+the rows crowd into a block; the ceiling is black.  A cell row of the
+screen has two colours, and where a wall's slanting edge crosses a
+cell on its way down to the floor the row is part wall and part
+floor: there the wall's red is the paper and the floor's green the
+ink, and the black of the lines waits for a row that is wall
+throughout - else the floor came out black in triangles under the
+wall's foot.
 
 Each pass `src/view.c` finds what each column shows - the cells about
 the party gone through front to back, each wall face taking the pixel
 columns not yet taken, a wall along the axis as one face however long
-- and keeps in memory a layer of what does not move in a step: the
-walls along the axis, their outline and mortar, the floor and its
-lines along.  A column of the layer is composed again only when the
-walls in it change.  The layer is copied to the screen and what moves
-is drawn over it: the joints, the walls across the axis (which grow as
-the party comes), the floor's edges across.  `src/map.c` is the test
-level, drawn as text; `src/hud.c` the screen round the view, with the
-map of the cells about the party, the party's arrow in the middle and
-the level sliding under it; `src/main.c` the loop: a step in five
-passes, a turn in eight, a pass of either in five frames.
+- and keeps in memory a layer of the view's columns composed: the
+walls along the axis with their outline and mortar, the walls across
+it with theirs, the floor and its lines along, the ceiling.  A column
+of the layer is composed again only when the walls in it change, and
+when a wall across the axis grows as the party comes, or shrinks as it
+goes back, only the rows it takes or leaves are done again.  Then each
+column goes up whole: what moves - the joints of the bricks where they
+fall at this phase, the floor's edges across - is drawn into the
+column, the column is put on the screen in one go, and the drawing is
+taken out of it again, so that nothing is ever on the screen without
+the rest.  The loops of a row of the column are `src/rows.s`.
+`src/map.c` is the test level, drawn as text and read as it is;
+`src/hud.c` the screen round the view, with the map of the cells about
+the party, the party's arrow in the middle and the level sliding under
+it; `src/main.c` the loop: a step in five passes, a turn in eight, a
+pass of either in five frames.
 
 The faces are PNGs under `art/`, turned into C by `tools/mkart.py` at
 build time; what is there now is drawn by `art/placeholders.py` and
 stands in until real pictures come.
 
-What the machine does: a pass of a turn in 4.0 frames, a pass of a
-step in 4.5 - ten a second, half a second a step, four fifths a
+What the machine does: a pass of a turn in 3.5 frames, a pass of a
+step in 4.8 - ten a second, half a second a step, four fifths a
 quarter turn.  On its way out the program prints how many passes it
 made in how many frames, and how many of them drew the view in how
 many; a build with `-DPROF=1` finds the pieces and paints nothing,
 `-DPROF=2` paints without finding, `-DPROF=3` leaves out what moves,
-`-DPROF=4` the layer's copy, for measuring the parts; `-DPACE=n` sets
-one pace for everything.  The time goes, in C, to the joints (a
-pixel a row), the layer's copy, the finding and the floor's edges;
-the loops of those are the next thing to write in assembler.
+`-DPROF=4` the columns' going up, `-DPROF=5` the joints, `-DPROF=6`
+the layer's keeping up, for measuring the parts; `-DPACE=n` sets one
+pace for everything.  A pass of a step goes, by those: the joints
+drawn and taken out again about one frame, the finding of the pieces
+and the columns composed again (two a pass, at the far end of the
+side walls) about one each, the columns' going up half a one, the
+rest in the finding of where each joint falls and the bookkeeping.
+The finding and the joints are the next things for assembler.  The
+program is 62 blocks and ends just under the video memory's window at
+0100000; the level's text is read as it is, and the pieces keep a
+plane's and a wall's fields over each other, to stay there.
 
 Not done yet: steps to the side shown in parts (they are instant);
 the planes farther than two and a half cells (a hall's far walls come
@@ -118,10 +138,12 @@ monsters, which will be sprites (`tex.h`) over the layer.
 walls, band, party and buttons; the left wall's top edge straight to
 the horizon, pixel by pixel, against the cylinder's own sum; the rows
 of mortar at the quarters of the wall, the joints between, the floor's
-edges; a step that runs the joints and moves no wall; a turn that
-slides the picture four columns a pass, comes back exactly and comes
-round the four quarters exactly; a wall that will not be walked
-through; the paces held, with what a pass costs told.
+edges; the wall's foot meeting the floor with no black under it; a
+step that runs the joints and moves no wall; two steps on and two
+back leaving the picture as it was composed whole; a turn that slides
+the picture four columns a pass, comes back exactly and comes round
+the four quarters exactly; a wall that will not be walked through;
+the paces held, with what a pass costs told.
 `--crypt-sav=<folder>` names another build, and then a missing program
 is a failure (CI); `--crypt-png=<folder>` keeps what the tests saw as
 PNGs.

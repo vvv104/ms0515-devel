@@ -6,10 +6,9 @@
 
 #include "map.h"
 
-unsigned char map[MAP_SIDE * MAP_SIDE];
 int map_startX, map_startY;
 
-static const char *const level[MAP_SIDE] = {
+const char *const map_rows[MAP_SIDE] = {
 	"################################",
 	"#S.........#...................#",
 	"#.#######..#.###.#.##########..#",
@@ -48,7 +47,7 @@ int map_at(int x, int y)
 {
 	if (x < 0 || y < 0 || x >= MAP_SIDE || y >= MAP_SIDE)
 		return 1;
-	return map[(y << 5) + x];
+	return MAP_WALL(map_rows[y][x]);
 }
 
 int map_free(int x, int y)
@@ -61,12 +60,9 @@ void map_test(void)
 	int x, y;
 
 	for (y = 0; y < MAP_SIDE; y++)
-		for (x = 0; x < MAP_SIDE; x++) {
-			char c = level[y][x];
-			map[(y << 5) + x] = (unsigned char)(c == '#');
-			if (c == 'S') {
+		for (x = 0; x < MAP_SIDE; x++)
+			if (map_rows[y][x] == 'S') {
 				map_startX = x;
 				map_startY = y;
 			}
-		}
 }

@@ -72,16 +72,16 @@ static const unsigned char arrows[4][4] = {
  * Straight off the level, since the map is drawn whole at every step. */
 static void mapRow(int mx, int my, unsigned char *bytes)
 {
-	const unsigned char *cell = map + (my << 5) + mx;
+	const char *cell = my >= 0 && my < MAP_SIDE ? map_rows[my] + mx : 0;
 	int q;
 
 	for (q = 0; q < MAP_ACROSS / 2; q++, cell += 2, mx += 2) {
 		unsigned char b = 0;
 
-		if (my >= 0 && my < MAP_SIDE) {
-			if (mx >= 0 && mx < MAP_SIDE && cell[0])
+		if (cell) {
+			if (mx >= 0 && mx < MAP_SIDE && MAP_WALL(cell[0]))
 				b = 0xF0;
-			if (mx + 1 >= 0 && mx + 1 < MAP_SIDE && cell[1])
+			if (mx + 1 >= 0 && mx + 1 < MAP_SIDE && MAP_WALL(cell[1]))
 				b |= 0x0F;
 		}
 		bytes[q] = b;
