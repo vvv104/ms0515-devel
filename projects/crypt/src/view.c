@@ -36,6 +36,13 @@
 #define MAX_PIECES 4
 #define LATERALS PLANE_LATERALS		/* cells beside the axis looked at */
 #define BRICK 20			/* a brick's length along a wall, 40ths of a cell: half a cell, twice its height */
+/* The detail kept: no two lines nearer than DETAIL pixels.  A wall
+ * whose brick rows would be shorter than that has no mortar but the
+ * horizon's, no joints and no corner lines, and is a fill; joints
+ * nearer than that along a wall are left out; the floor's lines along
+ * the axis too.  Else the far walls crowd into black. */
+#define DETAIL 4
+#define DETAILED(half) ((half) >= 2 * DETAIL)	/* a wall tall enough for its lines */
 #define WALL_ATTR (MS_PAPER(2) | MS_INK(0))
 #define FLOOR_ATTR (MS_PAPER(4) | MS_INK(0))
 #define CEILING_ATTR 0
@@ -113,6 +120,12 @@ static void clearRows(void)
 
 static int cellX, cellY, phase;
 static int fx, fy, rx, ry;		/* the facing: forward and right, in cells */
+/* The phase's rows of the tables, taken once a pass: the multiplying
+ * of indexes is the compiler's weak point. */
+static const unsigned char (*edgeNow)[PLANE_LATERALS + 1];	/* edge_px[phase] */
+static const unsigned char (*crossNow)[VIEW_CELLS];		/* cross_row[phase] */
+static const unsigned char *frontHalfNow;			/* front_half[phase] */
+static int phaseNow8;						/* phase_8[phase] */
 static int rangeFirst, rangeLast, rangeBase, uncovered;
 #define IX(c) ((c) - rangeFirst + rangeBase)	/* sector column c's index in the range's tables */
 static int turnDir, turnFacing;		/* the turn in progress: the old facing's sector slides */
@@ -291,7 +304,7 @@ NOINLINE static void frontFace(int x0, int x1, int j, int n, int corners)
 		if (!p)
 			continue;
 		p->corner = cornerPixels(c, x0, x1, corners, m);
-		half = fx_mul8(front_half[phase][n], col_cos[c]);
+		half = fx_mul8(frontHalfNow[n], col_cos[c]);
 		if (half < 1)
 			half = 1;
 		if (half > 255)
@@ -308,8 +321,8 @@ NOINLINE static void frontFace(int x0, int x1, int j, int n, int corners)
 /* The far edge of row n, lateral index L (cells 0.5 + L from the
  * axis), as a pixel column: to the right of the middle, or to the
  * left; row -1 is behind the party, past the sector's edge. */
-#define EDGE_RIGHT(n, L) ((n) < 0 ? SECTOR_CELLS * 8 : MIDDLE + edge_px[phase][n][L])
-#define EDGE_LEFT(n, L) ((n) < 0 ? 0 : MIDDLE - edge_px[phase][n][L])
+#define EDGE_RIGHT(n, L) ((n) < 0 ? SECTOR_CELLS * 8 : MIDDLE + edgeNow[n][L])
+#define EDGE_LEFT(n, L) ((n) < 0 ? 0 : MIDDLE - edgeNow[n][L])
 /* The far edge of row n in 40ths of a cell past the party. */
 #define DEPTH40(n) (((n) * 40 + 20) - phase * (40 / PLANE_PHASES))
 
@@ -368,7 +381,7 @@ static void flushAll(int through)
  * floor before them. */
 static void frontFaces(int n, const unsigned char *walls, const unsigned char *before)
 {
-	const unsigned char *near = edge_px[phase][n - 1];	/* the row's near edge */
+	const unsigned char *near = edgeNow[n - 1];	/* the row's near edge */
 	int j, k, flushed = 0, corners;
 
 	for (j = -LATERALS; j <= LATERALS; j++) {
@@ -476,26 +489,48 @@ static void planeMortar(int lateral, int x, unsigned char bit)
 {
 	int half = wall_half[lateral][x];
 
-	if (half > 1 && HALF - half / 2 >= 0)
-		setMortar(HALF - half / 2, bit);
 	setMortar(HALF, bit);
-	if (half > 1 && HALF + half / 2 < VIEW_ROWS)
+	if (!DETAILED(half))
+		return;
+	if (HALF - half / 2 >= 0)
+		setMortar(HALF - half / 2, bit);
+	if (HALF + half / 2 < VIEW_ROWS)
 		setMortar(HALF + half / 2, bit);
 }
 
-/* Those of a wall across the axis, for its pixels; none when it is too
- * short for brick rows. */
+/* The rows of a wall across the axis `half` rows tall that are lines:
+ * its top and its foot, where it meets the ceiling and the floor, and
+ * the three rows of mortar between its brick rows - none but the
+ * horizon's when it is too short for the detail.  Into rows[], those
+ * in the window; how many comes back. */
+static int frontRows(int half, int *rows)
+{
+	int n = 0;
+
+	rows[n++] = HALF;
+	if (!DETAILED(half))
+		return n;
+	if (HALF - half >= 0)
+		rows[n++] = HALF - half;
+	if (HALF - half / 2 >= 0)
+		rows[n++] = HALF - half / 2;
+	if (HALF + half / 2 < VIEW_ROWS)
+		rows[n++] = HALF + half / 2;
+	if (HALF + half - 1 < VIEW_ROWS)
+		rows[n++] = HALF + half - 1;
+	return n;
+}
+
+/* Those of a wall across the axis, for its pixels. */
 static void frontMortar(const struct piece *p)
 {
-	int half = p->half;
+	int rows[5], n, i;
 
-	if (p->kind != kFront || half < 4)
+	if (p->kind != kFront)
 		return;
-	if (HALF - half / 2 >= 0)
-		setMortar(HALF - half / 2, p->mask);
-	setMortar(HALF, p->mask);
-	if (HALF + half / 2 < VIEW_ROWS)
-		setMortar(HALF + half / 2, p->mask);
+	n = frontRows(p->half, rows);
+	for (i = 0; i < n; i++)
+		setMortar(rows[i], p->mask);
 }
 
 /* The mortar of all the column's pieces noted. */
@@ -598,7 +633,7 @@ static void floorLines(int c)
 		for (i = 0; i < 8; i++) {
 			x = TABLE_X(c, i);
 			half = wall_half[L][x];
-			if (half && HALF + half < VIEW_ROWS)
+			if (DETAILED(half) && HALF + half < VIEW_ROWS)
 				setLine(HALF + half, bitAt[i]);
 		}
 }
@@ -681,10 +716,15 @@ NOINLINE static void composeRow(int c, int row, unsigned char *q)
 			if (row < p->top || row > p->bottom)
 				continue;
 			wall |= p->mask;
-			if (p->kind == kFar)
+			if (p->kind == kFar) {
 				far |= p->mask;
-			else if (p->half >= 4 && (row == HALF || row == HALF - p->half / 2 || row == HALF + p->half / 2))
-				mort |= p->mask;
+			} else {
+				int rows[5], m = frontRows(p->half, rows), r;
+
+				for (r = 0; r < m; r++)
+					if (rows[r] == row)
+						mort |= p->mask;
+			}
 			continue;
 		}
 		for (k = 0; k < 8; k++) {
@@ -696,7 +736,7 @@ NOINLINE static void composeRow(int c, int row, unsigned char *q)
 				continue;
 			wall |= bitAt[k];
 			half = wall_half[p->lateral][x];
-			if (row == HALF || (half > 1 && (row == HALF - half / 2 || row == HALF + half / 2)))
+			if (row == HALF || (DETAILED(half) && (row == HALF - half / 2 || row == HALF + half / 2)))
 				mort |= bitAt[k];
 		}
 	}
@@ -800,7 +840,7 @@ NOINLINE static void joints(const struct piece *p, int c, int through)
 		if (!(p->corners & bitAt[k]))
 			continue;
 		half = wall_half[p->lateral][tc * 8 + (p->mirror ? 7 - k : k)];
-		if (half < 4)
+		if (!DETAILED(half))
 			continue;
 		brickRows(half, edges);
 		lineDown(edges, 0, 1, through, bitAt[k]);
@@ -838,14 +878,14 @@ NOINLINE static void joints(const struct piece *p, int c, int through)
 			i++;
 		k = p->mirror ? 7 - i : i;
 		x = (c << 3) + k;
-		if ((x - lastX < 2 && x - lastX > -2) || (x - xEnd < 2 && x - xEnd > -2))
+		if ((x - lastX < DETAIL && x - lastX > -DETAIL) || (x - xEnd < DETAIL && x - xEnd > -DETAIL))
 			continue;
 		lastX = x;
 		bit = bitAt[k];
 		if (!(p->mask & bit))
 			continue;
 		half = wall_half[p->lateral][tc * 8 + i];
-		if (half < 4)
+		if (!DETAILED(half))
 			continue;
 		brickRows(half, edges);		/* the two brick rows of this parity: 0 and 2, or 1 and 3 */
 		lineDown(edges, parity, 2, through, bit);
@@ -857,7 +897,7 @@ NOINLINE static void joints(const struct piece *p, int c, int through)
  * end. */
 static int along(int c, int n, int j)
 {
-	int d8 = (n << 8) - 128 - phase_8[phase];
+	int d8 = (n << 8) - 128 - phaseNow8;
 	int tan = col_tan[c] < 0 ? -col_tan[c] : col_tan[c];
 	int u8 = fx_mul8(tan > 255 ? 255 : tan, d8);
 
@@ -869,16 +909,17 @@ static int along(int c, int n, int j)
 /* The joints of a wall across the axis: where the brick along the face
  * changes from the column before, a line down the column's first
  * pixel - a cell column at a time, which is the picture's grain
- * anyway - the brick rows by turns; and a line the wall's height where
- * a corner of it stands. */
+ * anyway - the brick rows by turns, a brick half a cell as along the
+ * axis; and a line the wall's height where a corner of it stands. */
 NOINLINE static void frontJoints(const struct piece *p, int c, int through)
 {
 	int half = p->half, parity, u8, before;
 	int edges[5];
 
-	if (p->kind != kFront || half < 4)
+	if (p->kind != kFront || !DETAILED(half))
 		return;
 	brickRows(half, edges);
+	edges[4]--;				/* the foot's row is a line: the joints stop above it */
 	if (p->corner)
 		lineDown(edges, 0, 1, through, p->corner);
 	if (!(p->mask & 0x80) || c == 0)
@@ -886,7 +927,7 @@ NOINLINE static void frontJoints(const struct piece *p, int c, int through)
 	u8 = along(c, p->n, p->j);
 	before = along(c - 1, p->n, p->j);
 	for (parity = 0; parity < 2; parity++)
-		if (((u8 + (parity ? 32 : 0)) >> 6) != ((before + (parity ? 32 : 0)) >> 6))
+		if (((u8 + (parity ? 64 : 0)) >> 7) != ((before + (parity ? 64 : 0)) >> 7))
 			lineDown(edges, parity, 2, through, 0x80);
 }
 
@@ -894,7 +935,7 @@ NOINLINE static void frontJoints(const struct piece *p, int c, int through)
  * where each stands at this phase, down to the nearest wall's foot. */
 static void floorEdges(int c, int from)
 {
-	const unsigned char *at = &cross_row[phase][1][c - SECTOR_FIRST];	/* row n's entry, a row's worth on */
+	const unsigned char *at = &crossNow[1][c - SECTOR_FIRST];	/* row n's entry, a row's worth on */
 	int n, row;
 
 	edgeN = 0;
@@ -952,6 +993,10 @@ static void place(const struct view *v)
 	cellX = v->cellX;
 	cellY = v->cellY;
 	phase = v->phase;
+	edgeNow = edge_px[phase];
+	crossNow = cross_row[phase];
+	frontHalfNow = front_half[phase];
+	phaseNow8 = phase_8[phase];
 	facing(v->facing);
 }
 
@@ -1023,12 +1068,7 @@ NOINLINE static void layerColumn(int c, int slot)
  * or none: into rows[]. */
 static int mortarRowsOf(int half, int *rows)
 {
-	if (half < 4)
-		return 0;
-	rows[0] = HALF - half / 2;
-	rows[1] = HALF;
-	rows[2] = HALF + half / 2;
-	return 3;
+	return frontRows(half, rows);
 }
 
 /* The walls across the axis in column c grown or shrunk since its
@@ -1040,7 +1080,7 @@ NOINLINE static void layerFronts(int c, int slot)
 	const struct piece *p = pieces[IX(c)];
 	const struct known *k = known[slot];
 	unsigned char (*col)[2] = layer[slot], *q;
-	int i, j, m, n = count[IX(c)], row, rows[3], noted = 0;
+	int i, j, m, n = count[IX(c)], row, rows[5], noted = 0;
 
 	/* The rows taken need the other pieces' mortar, where one makes a
 	 * row wall throughout; the rows left need the floor's lines: the

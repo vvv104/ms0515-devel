@@ -85,7 +85,15 @@ throughout - else the floor came out black in triangles under the
 wall's foot.  Where a wall ends - a wall across the axis at an edge
 whose neighbour shows no face across, a wall along it at an end with
 floor before or past it - a line stands down the corner, and no joint
-comes within a pixel of it.
+comes near it.  A wall across the axis has its top and its foot lined
+too, where it meets the ceiling and the floor; a wall along the axis
+meets them on a slant that crosses the cells, and a cell row part wall
+and part floor has no third colour for a line, so there the edge is
+where the red meets the green.  One threshold keeps the detail from
+crowding into black far away: no two lines nearer than four pixels.
+A wall whose brick rows would be shorter than that has no mortar but
+the horizon's, no joints, no corner lines, and is a fill; joints nearer
+than that along a wall are left out, and so are the floor's lines.
 
 Each pass `src/view.c` finds what each column shows - the cells about
 the party gone through front to back, each wall face taking the pixel

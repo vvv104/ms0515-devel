@@ -280,6 +280,13 @@ TEST_CASE("up to the wall ahead: its corners lined, its mortar following, a turn
      * line there. */
     for (int r : {40, 60, 80}) CHECK_FALSE(coloured(crawl, 84, r));
     for (int r : {30, 50, 70, 90}) CHECK(coloured(crawl, 84, r));
+    /* Its bricks are half a cell wide, as the side walls' are: across
+     * its face, two and a half cells wide at this distance, a brick
+     * row has two joints, or three. */
+    int joints = 0;
+    for (int x = 38; x < 138; ++x) joints += !coloured(crawl, x, 50) && !coloured(crawl, x, 49) && !coloured(crawl, x, 51);
+    CHECK(joints >= 2);
+    CHECK(joints <= 3);
     for (int r = 24; r <= 96; ++r) { CAPTURE(r); CHECK_FALSE(coloured(crawl, 36, r)); }
     for (int r = 24; r <= 40; ++r) {
         CAPTURE(r);
