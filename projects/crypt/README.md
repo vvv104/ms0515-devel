@@ -90,10 +90,15 @@ too, where it meets the ceiling and the floor; a wall along the axis
 meets them on a slant that crosses the cells, and a cell row part wall
 and part floor has no third colour for a line, so there the edge is
 where the red meets the green.  One threshold keeps the detail from
-crowding into black far away: no two lines nearer than four pixels.
-A wall whose brick rows would be shorter than that has no mortar but
-the horizon's, no joints, no corner lines, and is a fill; joints nearer
-than that along a wall are left out, and so are the floor's lines.
+crowding into black far away: no two lines nearer than four pixels,
+the first of a crowd kept and the rest left out, so that something is
+always drawn.  A wall has its rows of mortar when its brick rows are
+four rows tall; shorter, it keeps the horizon's line, its top and foot
+(across the axis), its corners and a joint a brick, the wall's height,
+down to four rows tall, under which it is a fill.  Joints nearer than
+four pixels along a wall are left out, and the floor's lines along
+the axis nearer than that to one another, from the farthest plane's
+on.
 
 Each pass `src/view.c` finds what each column shows - the cells about
 the party gone through front to back, each wall face taking the pixel
@@ -108,45 +113,53 @@ column goes up whole: what moves - the joints of the bricks where they
 fall at this phase, the floor's edges across - is drawn into the
 column, the column is put on the screen in one go, and the drawing is
 taken out of it again, so that nothing is ever on the screen without
-the rest.  The loops of a row of the column are `src/rows.s`.
+the rest.  The loops of a row of the column are `src/rows.s`; the
+finding of the joints and the corners, and the column's going up, are
+`src/joints.s` - assembler, since the compiler made three times the
+code of them and ran it slower.  The tables are `geometry.c`, made
+with the header, so that the assembler reads them too.
 `src/map.c` is the test level, drawn as text and read as it is;
 `src/hud.c` the screen round the view, with the map of the cells about
 the party, the party's arrow in the middle and the level sliding under
 it; `src/main.c` the loop: a step in five passes, a turn in eight, a
-pass of a turn in five frames and of a step in six.
+pass of either in five frames.
 
 The faces are PNGs under `art/`, turned into C by `tools/mkart.py` at
 build time; what is there now is drawn by `art/placeholders.py` and
 stands in until real pictures come.
 
 What the machine does: a pass of a turn in 3.5 frames, a pass of a
-step in 5.2 - ten turn passes a second and eight of a step: four
-fifths of a second a quarter turn, three fifths a step.  On its way
-out the program prints how many passes it
+step in 4.7 - ten a second, half a second a step, four fifths a
+quarter turn.  On its way out the program prints how many passes it
 made in how many frames, and how many of them drew the view in how
 many; a build with `-DPROF=1` finds the pieces and paints nothing,
-`-DPROF=2` paints without finding, `-DPROF=3` leaves out what moves,
-`-DPROF=4` the columns' going up, `-DPROF=5` the joints, `-DPROF=6`
-the layer's keeping up, for measuring the parts; `-DPACE=n` sets one
-pace for everything.  A pass of a step goes, by those: the joints
-drawn and taken out again about one frame, the finding of the pieces
-and the columns composed again (two a pass, at the far end of the
-side walls) about one each, the columns' going up half a one, the
-rest in the finding of where each joint falls and the bookkeeping.
-The finding and the joints are the next things for assembler, for
-speed and for room both.  The program is 62 blocks, 16.9 KB of code
-and 13.8 KB of data, and ends under the video memory's window at
-0100000 with a kilobyte to spare: the level's text is read as it is,
-the pieces keep a plane's and a wall's fields over each other, the
-stack is 512 bytes (a run through every move uses under 200), the
-band's title is put together without the runtime's string.c, and the
-screen round the view, the level and the loop are compiled for size
-(the view is not: the compiler's size mode calls subroutines for
-shifts, and a pass slows by a third).  Any more - other kinds of wall,
-floor and ceiling, monsters - needs the memory banks: the code and the
-stack under 040000, the data from there in the primary bank with the
-extended banks behind it for what is not in use every pass, which the
-assembler must make room for first.
+`-DPROF=2` paints without finding, `-DPROF=5` leaves out the joints,
+`-DPROF=6` the layer's keeping up, for measuring the parts; `-DPACE=n`
+sets one pace for everything.  A pass of a step goes, by those: the
+joints found, drawn and taken out again about a frame, the finding of
+the pieces and the columns composed again (two a pass, at the far end
+of the side walls) about one each, the columns' going up half a one,
+the rest bookkeeping.  The finding of the pieces is the next thing
+for assembler, for speed and for room both.  The program is 62
+blocks, 16.1 KB of code and 14.1 KB of data, and ends under the video
+memory's window at 0100000 with a kilobyte and a half to spare: the
+level's text is read as it is, the pieces keep a plane's and a wall's
+fields over each other, the stack is 512 bytes (a run through every
+move uses under 200), the band's title is put together without the
+runtime's string.c, and the screen round the view, the level and the
+loop are compiled for size (the view is not: the compiler's size mode
+calls subroutines for shifts, and a pass slows by a third).  Any more
+- other kinds of wall, floor and ceiling, monsters - needs the memory
+banks: the code and the stack under 040000, the data from there in
+the primary bank with the extended banks behind it for what is not
+in use every pass; the code is a few hundred bytes from fitting.
+
+A trap of the assembler, beside the toolset README's: a conditional
+branch reaches 254 bytes and `as` says nothing when the target is
+farther - the displacement wraps and the branch lands in the middle
+of another instruction, which runs on as garbage until it traps far
+away (`jmp` is the long form).  Numbers without a leading 0 are
+decimal there, offsets included.
 
 Not done yet: steps to the side shown in parts (they are instant);
 the planes farther than two and a half cells (a hall's far walls come
