@@ -343,20 +343,28 @@ static void visibility(int first, int last)
 
 /* The sector pixel columns of the pixels of column c as the tables
  * have them: the left half's, mirrored for the right. */
-static unsigned char tx[8];
+static unsigned char tableXs[SECTOR_CELLS][8];
+static const unsigned char *tx;		/* the column in hand's */
 
 static void tableX(int c)
 {
-	int i, x = c << 3;
+	static int made;
+	int k, i, x;
 
-	for (i = 0; i < 8; i++, x++)
-		tx[i] = (unsigned char)(x < MIDDLE ? x : 2 * MIDDLE - 1 - x);
+	if (!made) {				/* the tables made once */
+		made = 1;
+		for (k = 0; k < SECTOR_CELLS; k++)
+			for (i = 0, x = k << 3; i < 8; i++, x++)
+				tableXs[k][i] = (unsigned char)(x < MIDDLE ? x : 2 * MIDDLE - 1 - x);
+	}
+	tx = tableXs[c];
 }
 
 /* The wall's rows in each pixel of the column in hand: from top[i] to
  * bottom[i]; the horizon's row and the one before it where no wall
  * is.  lines: the pixels a line stands down, for the thinning. */
 static unsigned char top[8], bottom[8], lines;
+static int minBottom, maxBottom;	/* the least and the greatest of bottom[] */
 
 /* A black line down pixel i from row a to row b. */
 static void vline(int i, int a, int b)
@@ -371,18 +379,18 @@ static void vline(int i, int a, int b)
 /* A seam of the wall at sector pixel column x, if it falls in the
  * piece's pixels of column c: a line down the wall there, unless one
  * stands within DETAIL pixels already. */
+/* The pixels within DETAIL - 1 of pixel i, i among them. */
+static const unsigned char nearPixels[8] = {0xF0, 0xF8, 0xFC, 0xFE, 0x7F, 0x3F, 0x1F, 0x0F};
+
 static void seam(int c, const struct piece *p, int x)
 {
-	int i, k;
+	int i;
 
 	if (x < 0 || x >= 2 * MIDDLE || (x >> 3) != c)
 		return;
 	i = x & 7;
-	if (!(p->mask & bitAt[i]))
+	if (!(p->mask & bitAt[i]) || (lines & nearPixels[i]))
 		return;
-	for (k = i - DETAIL + 1; k < i + DETAIL; k++)
-		if (k >= 0 && k < 8 && (lines & bitAt[k]))
-			return;
 	lines |= bitAt[i];
 	vline(i, top[i], bottom[i]);
 }
@@ -413,7 +421,7 @@ static void rightSeam(int c, const struct piece *p, int x1)
  * goes on. */
 static void wall(int c, const struct piece *p)
 {
-	int i, half, n, x0, x1, L = p->lateral;
+	int i, half, n, x, x0, x1, lo, hi, L = p->lateral;
 	const unsigned char *near;
 
 	for (i = 0; i < 8; i++) {
@@ -433,16 +441,32 @@ static void wall(int c, const struct piece *p)
 		column[bottom[i]] |= bitAt[i];
 	}
 	if (p->kind == kPlane) {
+		/* The seams between the run's cells: the corners come nearer
+		 * the sector's middle row by row, so going from the column's
+		 * outer side in, those short of the column are passed and the
+		 * first past it ends the loop. */
+		lo = c << 3;
+		hi = lo + 7;
 		if (p->mirror) {		/* on the right the run's near end is its right edge */
 			x0 = edgeRight(p->through, L);
 			x1 = edgeRight(p->from - 1, L);
-			for (n = p->through - 1; n >= p->from; n--)
-				seam(c, p, edgeRight(n, L));
+			for (n = p->through - 1; n >= p->from; n--) {
+				x = MIDDLE + edgeNow[n][L];
+				if (x > hi)
+					break;
+				if (x >= lo)
+					seam(c, p, x);
+			}
 		} else {
 			x0 = edgeLeft(p->from - 1, L);
 			x1 = edgeLeft(p->through, L);
-			for (n = p->from; n < p->through; n++)
-				seam(c, p, edgeLeft(n, L));
+			for (n = p->from; n < p->through; n++) {
+				x = MIDDLE - edgeNow[n][L];
+				if (x > hi)
+					break;
+				if (x >= lo)
+					seam(c, p, x);
+			}
 		}
 	} else {
 		near = edgeNow[p->through - 1];
@@ -476,12 +500,16 @@ static void crossEdges(int c)
 		if (r > last - DETAIL)
 			continue;
 		last = r;
-		bits = 0;
-		for (i = 0; i < 8; i++)
-			if (r > bottom[i])
-				bits |= bitAt[i];
-		if (!bits)
+		if (r <= minBottom)		/* under every pixel's wall: so are the rest, nearer the horizon */
 			break;
+		if (r > maxBottom) {
+			bits = 0xFF;
+		} else {
+			bits = 0;
+			for (i = 0; i < 8; i++)
+				if (r > bottom[i])
+					bits |= bitAt[i];
+		}
 		column[r] |= bits;
 		column[VIEW_ROWS - 1 - r] |= bits;
 	}
@@ -492,46 +520,121 @@ static void crossEdges(int c)
  * meet the floor - a wall's foot, were a wall there - the nearest
  * first, each at least DETAIL from the one before and from the wall's
  * foot. */
-static void alongEdges(void)
-{
-	int i, L, half, r, last;
+/* Which rows those are, the thinning done: geometry alone, tabled
+ * once - alongTab[c][L][i] the row of plane L's line in pixel i of
+ * sector column c, 0 for none; alongMin and alongMax the least and the
+ * greatest of a column's rows for the plane.  A plane farther out has
+ * its rows nearer the horizon, so a line under a pixel's wall has the
+ * farther ones under it too. */
+static unsigned char alongTab[SECTOR_CELLS][LATERALS][8];
+static unsigned char alongMin[SECTOR_CELLS][LATERALS], alongMax[SECTOR_CELLS][LATERALS];
+static int alongMade;
 
-	for (i = 0; i < 8; i++) {
-		last = VIEW_ROWS + DETAIL;
+static void alongTables(void)
+{
+	int c, i, L, half, r, last, x;
+
+	for (c = 0; c < SECTOR_CELLS; c++) {
 		for (L = 0; L < LATERALS; L++) {
-			half = wall_half[L][tx[i]];
-			if (!half)
-				continue;
-			r = HALF + half;
-			if (r >= VIEW_ROWS || r > last - DETAIL)
-				continue;
-			if (r <= bottom[i] + 1)	/* at the wall's foot it is the foot's own seam */
-				break;
-			last = r;
-			column[r] |= bitAt[i];
-			column[VIEW_ROWS - 1 - r] |= bitAt[i];
+			alongMin[c][L] = 255;
+			alongMax[c][L] = 0;
+		}
+		for (i = 0; i < 8; i++) {
+			x = (c << 3) + i;
+			x = x < MIDDLE ? x : 2 * MIDDLE - 1 - x;
+			last = VIEW_ROWS + DETAIL;
+			for (L = 0; L < LATERALS; L++) {
+				half = wall_half[L][x];
+				r = HALF + half;
+				alongTab[c][L][i] = 0;
+				if (!half || r >= VIEW_ROWS || r > last - DETAIL)
+					continue;
+				last = r;
+				alongTab[c][L][i] = (unsigned char)r;
+				if (r < alongMin[c][L])
+					alongMin[c][L] = (unsigned char)r;
+				if (r > alongMax[c][L])
+					alongMax[c][L] = (unsigned char)r;
+			}
 		}
 	}
 }
 
+/* A line's pixel at row r, and the ceiling's mirror. */
+#define ALONG(r, bit) (column[r] |= (bit), column[VIEW_ROWS - 1 - (r)] |= (bit))
+
+static void alongEdges(int c)
+{
+	const unsigned char *rows;
+	int i, L, r;
+
+	for (L = 0; L < LATERALS; L++) {
+		if (!alongMax[c][L])
+			continue;
+		if (alongMax[c][L] <= minBottom + 1)	/* at or under every wall's foot: the farther too */
+			break;
+		rows = alongTab[c][L];
+		if (alongMin[c][L] > maxBottom + 1) {	/* over none: all of them */
+			for (i = 0; i < 8; i++)
+				if ((r = rows[i]) != 0)
+					ALONG(r, bitAt[i]);
+			continue;
+		}
+		for (i = 0; i < 8; i++)		/* at the wall's foot it is the foot's own seam */
+			if ((r = rows[i]) != 0 && r > bottom[i] + 1)
+				ALONG(r, bitAt[i]);
+	}
+}
+
+/* PROF, a build switch for measuring: 1 finds the pieces and draws
+ * nothing, 2 draws but puts nothing on the screen, 3 clears and puts
+ * the columns but draws no edges, 4 draws the walls' edges alone. */
+#ifndef PROF
+#define PROF 0
+#endif
+
 /* Sector column c drawn on screen column `screen` from its pieces. */
 static void draw(int c, int screen)
 {
+	const unsigned paper = (unsigned)PAPER << 8;
+	unsigned *w = column;
 	int row, i;
 
-	for (row = 0; row < VIEW_ROWS; row++)
-		column[row] = (unsigned)PAPER << 8;
+	if (PROF == 1)
+		return;
+	for (row = 0; row < VIEW_ROWS; row += 8, w += 8) {	/* eight words a turn: the loop's own cost was the half */
+		w[0] = paper;
+		w[1] = paper;
+		w[2] = paper;
+		w[3] = paper;
+		w[4] = paper;
+		w[5] = paper;
+		w[6] = paper;
+		w[7] = paper;
+	}
 	for (i = 0; i < 8; i++) {
 		top[i] = HALF;
 		bottom[i] = HALF - 1;
 	}
 	lines = 0;
 	tableX(c);
-	for (i = 0; i < count[IX(c)]; i++)
-		wall(c, &pieces[IX(c)][i]);
-	crossEdges(c);
-	alongEdges();
-	ms_vput(screen, VIEW_TOP, VIEW_ROWS, column);
+	if (PROF != 3) {
+		for (i = 0; i < count[IX(c)]; i++)
+			wall(c, &pieces[IX(c)][i]);
+		minBottom = maxBottom = bottom[0];
+		for (i = 1; i < 8; i++) {
+			if (bottom[i] < minBottom)
+				minBottom = bottom[i];
+			if (bottom[i] > maxBottom)
+				maxBottom = bottom[i];
+		}
+		if (PROF != 4) {
+			crossEdges(c);
+			alongEdges(c);
+		}
+	}
+	if (PROF != 2)
+		ms_vput(screen, VIEW_TOP, VIEW_ROWS, column);
 }
 
 /* -- The passes ------------------------------------------------------- */
@@ -545,6 +648,10 @@ static void place(const struct view *v)
 	crossNow = cross_row[phase];
 	frontHalfNow = front_half[phase];
 	facing(v->facing);
+	if (!alongMade) {			/* the floor's lines along tabled once */
+		alongTables();
+		alongMade = 1;
+	}
 }
 
 void view_invalidate(void)

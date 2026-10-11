@@ -94,19 +94,24 @@ column in memory, which goes up whole.  `src/map.c` is the test level,
 drawn as text and read as it is; `src/hud.c` the screen round the
 view, with the map of the cells about the party, the party's arrow in
 the middle and the level sliding under it; `src/main.c` the loop: a
-step in five passes, a turn in eight, a pass of a turn in five frames
-and of a step in six.
+step in five passes, a turn in eight, a pass of either in five
+frames.
 
 The faces are PNGs under `art/`, turned into C by `tools/mkart.py` at
 build time; what is there now is drawn by `art/placeholders.py` and
 stands in until real pictures come.
 
-What the machine does: a pass of a turn in 1.6 frames, a pass of a
-step in 5.8 - the finding of the pieces and the drawing of every
-column again, in C.  On its way out the program prints how many
-passes it made in how many frames, and how many of them drew the view
-in how many; `-DPACE=n` sets one pace for everything.  The program is
-34 blocks.  The project is C throughout; what the machine library
+What the machine does: a pass of a turn in 1.5 frames, a pass of a
+step in 4.8 - ten a second, half a second a step, four fifths a
+quarter turn.  On its way out the program prints how many passes it
+made in how many frames, and how many of them drew the view in how
+many; `-DPACE=n` sets one pace for everything, and `-DPROF=1` finds
+the pieces and draws nothing, `-DPROF=2` draws but puts nothing on the
+screen, `-DPROF=3` clears and puts the columns without edges,
+`-DPROF=4` draws the walls' edges alone, for measuring the parts.  A
+pass of a step goes, by those: the finding of the pieces 0.9 frames,
+the columns cleared 0.8, put on the screen 0.7, the walls' edges 1.9,
+the floor's and the ceiling's 0.4.  The program is 39 blocks.  The project is C throughout; what the machine library
 does in assembler (`ms_vput`, `ms_hscroll`) is the toolset's, with
 its tests.
 
