@@ -17,10 +17,11 @@ rt11_devel/toolset/gcc/
 ├── aout2sav.py          the linked a.out as a .SAV: block 0, bss, stack
 ├── rt/                  the runtime, assembled with each project
 │   ├── crt0.s           _start: main() then .EXIT; __main, exit, rt11_memtop
-│   ├── arith.s          the 16- and 32-bit multiply and divide, __xorhi3
+│   ├── arith.s          the 16-bit multiply and divide, __xorhi3
+│   ├── arith32.s        the 32-bit ones, apart so that a program without longs links none
 │   ├── emt.s            RT-11's requests as C functions
 │   ├── files.c          the files: .LOOKUP, .READW, .READ and .WAIT, .ENTER, .WRITW, .CLOSE
-│   └── fx.s, fx.c       fixed point cut to size: fx_div8, fx_mul, fx_sin, fx_cos
+│   └── fx.s, fxmul.s, fx.c  fixed point cut to size: fx_div8, fx_mul8; fx_mul; fx_sin, fx_cos
 ├── libc/                stdio over the console, string, ctype, stdlib, the heap
 ├── machine/             the screen, the clock, the keyboard, the joystick, the speaker
 ├── include/             rt11.h, ms0515.h, fx.h, stdio.h, stdlib.h, string.h, ctype.h

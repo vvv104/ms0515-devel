@@ -38,10 +38,12 @@ function(_rt11_gcc_runtime)
     add_library(rt11_crt0 OBJECT "${RT11_GCC_DIR}/rt/crt0.s")
     add_library(rt11 STATIC
         "${RT11_GCC_DIR}/rt/arith.s"
+        "${RT11_GCC_DIR}/rt/arith32.s"
         "${RT11_GCC_DIR}/rt/emt.s"
         "${RT11_GCC_DIR}/rt/files.c"
         "${RT11_GCC_DIR}/rt/fx.c"
         "${RT11_GCC_DIR}/rt/fx.s"
+        "${RT11_GCC_DIR}/rt/fxmul.s"
         "${RT11_GCC_DIR}/libc/console.c"
         "${RT11_GCC_DIR}/libc/heap.c"
         "${RT11_GCC_DIR}/libc/printf.c"

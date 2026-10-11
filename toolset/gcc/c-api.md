@@ -242,7 +242,7 @@ empty texels left unwritten.
 ## fx.h - fixed point, cut to size
 
 What a 3D picture is made of on a processor without multiply or divide
-(`rt/fx.s`, `rt/fx.c`): the shapes a projection or a ray needs, written
+(`rt/fx.s`, `rt/fxmul.s`, `rt/fx.c`): the shapes a projection or a ray needs, written
 out, and the tables a turn needs.  8.8 fixed point where it is said: 256
 is one.
 
