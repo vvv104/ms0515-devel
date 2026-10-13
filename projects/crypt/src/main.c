@@ -22,8 +22,8 @@
 /* Frames a pass takes, by what the pass has to draw: a turn slides
  * the picture and draws four columns, a step draws all twenty-two. */
 #ifndef PACE
-#define TURN_PACE 5			/* 10 a second: a quarter turn in four fifths of a second */
-#define STEP_PACE 5			/* 10 a second: a step in half a second */
+#define TURN_PACE 2			/* 25 a second: a quarter turn in a third of a second */
+#define STEP_PACE 4			/* 12.5 a second: a step in two fifths of a second */
 #define IDLE_PACE 2			/* standing: the keys looked at */
 #else
 #define TURN_PACE PACE			/* one pace for all, for measuring */

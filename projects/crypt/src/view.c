@@ -385,23 +385,22 @@ static void visibility(int first, int last)
 
 /* -- The edges drawn ---------------------------------------------------- */
 
-/* The sector pixel columns of the pixels of column c as the tables
- * have them: the left half's, mirrored for the right. */
-static unsigned char tableXs[SECTOR_CELLS][8];
-static const unsigned char *tx;		/* the column in hand's */
+/* The height of plane L's wall in each pixel of sector column c, as
+ * wall_half has it for the left half of the sector and mirrored for the
+ * right: planeHalf[c][L][i], tabled once. */
+static unsigned char planeHalf[SECTOR_CELLS][LATERALS][8];
 
-static void tableX(int c)
+static void planeTables(void)
 {
-	static int made;
-	int k, i, x;
+	int c, L, i, x;
 
-	if (!made) {				/* the tables made once */
-		made = 1;
-		for (k = 0; k < SECTOR_CELLS; k++)
-			for (i = 0, x = k << 3; i < 8; i++, x++)
-				tableXs[k][i] = (unsigned char)(x < MIDDLE ? x : 2 * MIDDLE - 1 - x);
-	}
-	tx = tableXs[c];
+	for (c = 0; c < SECTOR_CELLS; c++)
+		for (i = 0; i < 8; i++) {
+			x = (c << 3) + i;
+			x = x < MIDDLE ? x : 2 * MIDDLE - 1 - x;
+			for (L = 0; L < LATERALS; L++)
+				planeHalf[c][L][i] = wall_half[L][x];
+		}
 }
 
 /* The column is drawn in rows below the horizon, k = 0..HALF - 1 for
@@ -541,6 +540,7 @@ static void darkness(const struct piece *p)
 static void wall(int c, const struct piece *p)
 {
 	const unsigned char *halves;
+	unsigned bit;
 	int i, half, n, x, x0, x1, lo, hi, L = p->lateral;
 
 	if (p->kind == kDark) {
@@ -556,19 +556,16 @@ static void wall(int c, const struct piece *p)
 			column[half - 1] |= p->mask;	/* the foot, and so the top */
 		fronts |= p->mask;
 	} else {
-		halves = wall_half[L];
-		for (i = 0; i < 8; i++) {
-			if (!(p->mask & bitAt[i]))
-				continue;
-			half = halves[tx[i]];
-			if (!half)
+		halves = planeHalf[c][L];
+		for (i = 0, bit = 0x80; i < 8; i++, bit >>= 1) {
+			if (!(p->mask & bit) || !(half = halves[i]))
 				continue;
 			if (half > HALF) {
 				height[i] = HALF;
 				continue;
 			}
 			height[i] = (unsigned char)half;
-			column[half - 1] |= bitAt[i];	/* the foot, and so the top */
+			column[half - 1] |= bit;	/* the foot, and so the top */
 		}
 	}
 	faceEdges(p, &x0, &x1);
@@ -747,7 +744,6 @@ static void draw(int c, int screen)
 		height[i] = 0;
 	lines = 0;
 	fronts = 0;
-	tableX(c);
 	if (PROF != 3) {
 		for (i = 0; i < count[IX(c)]; i++)
 			wall(c, &pieces[IX(c)][i]);
@@ -780,6 +776,7 @@ static void place(const struct view *v)
 	facing(v->facing);
 	if (!alongMade) {			/* the floor's lines along tabled once */
 		alongTables();
+		planeTables();
 		alongMade = 1;
 	}
 }

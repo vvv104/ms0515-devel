@@ -80,7 +80,10 @@ behind it, the corner is the nearer one's, a line down its last
 pixel.  Nearer than four pixels to a line drawn no other seam between
 cells is: far away the cells crowd, and only the first of a crowd
 shows; a face's own edge, the shape of the place, gives way only to a
-line beside it.  The machine's cells of eight pixels have two colours,
+line beside it.  The view looks four rows of cells ahead and no
+farther: what no wall nearer takes is dark, a black wall standing on
+the far edge of the fourth row, and nothing past it is worked out - nor
+anything a wall hides.  The machine's cells of eight pixels have two colours,
 and that is why the view is one colour with black lines: a fill that
 met another on a slant would have to share a cell's row with the line
 between them, a third colour, and the line would have to go, or step
@@ -95,28 +98,33 @@ Each pass `src/view.c` finds what each pixel column shows - the cells
 about the party gone through front to back, each wall face taking the
 pixel columns not yet taken, a wall along the axis as one face however
 long - and draws each cell column of the view from its pieces into a
-column in memory, which goes up whole.  `src/map.c` is the test level,
+column in memory, which goes up whole.  The view is the same upside
+down, the ceiling the floor turned over and a wall's top its foot, so
+only its lower half is drawn, from the horizon down, and put up twice,
+down and up (`ms_vput_folded`); the wall in each pixel is one height
+either side of the horizon.  `src/map.c` is the test level,
 drawn as text and read as it is; `src/hud.c` the screen round the
 view, with the map of the cells about the party, the party's arrow in
 the middle and the level sliding under it; `src/main.c` the loop: a
-step in five passes, a turn in eight, a pass of either in five
-frames.
+step in five passes of four frames, a turn in eight of two.
 
 The faces are PNGs under `art/`, turned into C by `tools/mkart.py` at
 build time; what is there now is drawn by `art/placeholders.py` and
 stands in until real pictures come.
 
-What the machine does: a pass of a turn in 1.5 frames, a pass of a
-step in 4.7 - ten a second, half a second a step, four fifths a
-quarter turn.  On its way out the program prints how many passes it
-made in how many frames, and how many of them drew the view in how
-many; `-DPACE=n` sets one pace for everything, and `-DPROF=1` finds
-the pieces and draws nothing, `-DPROF=2` draws but puts nothing on the
-screen, `-DPROF=3` clears and puts the columns without edges,
-`-DPROF=4` draws the walls' edges alone, for measuring the parts.  A
-pass of a step goes, by those: the finding of the pieces 0.9 frames,
-the columns cleared 0.8, put on the screen 0.7, the walls' edges 1.9,
-the floor's and the ceiling's 0.4.  The program is 38 blocks.  The project is C throughout; what the machine library
+What the machine does: a pass of a turn in 1.3 frames, a pass of a
+step in 3.3 - a turn at 25 passes a second, a third of a second a
+quarter turn; a step at 12.5, two fifths of a second.  On its way out
+the program prints how many passes it made in how many frames, and how
+many of them drew the view in how many; `-DPACE=n` sets one pace for
+everything, and `-DPROF=1` finds the pieces and draws nothing,
+`-DPROF=2` draws but puts nothing on the screen, `-DPROF=3` clears and
+puts the columns without edges, `-DPROF=4` draws the walls' edges
+alone, for measuring the parts.  Where a pass of a step goes, sampled
+by the program counter a thousand times a second, about: putting the columns
+on the screen a fifth, the walls a sixth, clearing the columns a tenth,
+the floor's lines a seventh, the finding of the pieces a sixth.  The
+program is 40 blocks.  The project is C throughout; what the machine library
 does in assembler (`ms_vput`, `ms_hscroll`) is the toolset's, with
 its tests.
 
@@ -133,9 +141,10 @@ to the horizon, pixel by pixel, against the cylinder's own sum; the
 seams where the cells' corners fall, the floor's edge across right up
 to the wall's foot and not into the wall, and the ceiling's its
 mirror; the wall ahead's foot one line with the floor's edge under
-it; a wall ending before one farther behind, its corner a line; a step
-that runs the seams and moves no edge; two steps on
-and two back, and a turn there and back, leaving the picture as it
+it; past four cells dark; a corner with a farther one straight behind
+it a line, and the floor's lines meeting the wall they run to; a step
+that runs the seams and moves no edge; six steps on
+and six back, and a turn there and back, leaving the picture as it
 was; the wall ahead as a frame with its seams; a turn that slides the
 picture four columns a pass, comes back exactly and comes round the
 four quarters exactly; a wall that will not be walked through; the

@@ -24,8 +24,8 @@ using namespace crypt;
 namespace {
 
 constexpr int kWarmUp = 200;     /* frames before the first key: the screen up */
-constexpr int kTurnPace = 5;     /* frames a pass of a turn takes (main.c TURN_PACE) */
-constexpr int kStepPace = 5;     /* of a step (STEP_PACE) */
+constexpr int kTurnPace = 2;     /* frames a pass of a turn takes (main.c TURN_PACE) */
+constexpr int kStepPace = 4;     /* of a step (STEP_PACE) */
 constexpr int kIdlePace = 2;
 constexpr int kStepPasses = 5;   /* a step's phases (geometry.py PHASES) */
 constexpr int kTurnPasses = 8;
@@ -374,43 +374,34 @@ TEST_CASE("a turn slides the picture four columns a pass; four of them come roun
     crawl.run(kWarmUp);
     for (int i = 0; i < 2; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }   /* a wall beside on the right, to turn to */
     const auto start = crawl.view();
-    /* The frames of the turn, each kept when the screen stood still
-     * over a frame (a pass painted, the next not begun): a pass's
-     * picture is the one before moved four cells left, the four on the
-     * right new. */
+    /* The frames of the turn, every one: a pass moves the picture four
+     * cells left and draws the four on the right new, so whenever the
+     * screen is looked at, its left part is the start's moved left by
+     * four cells for each pass gone by - in all but the moment of the
+     * move itself.  Over the turn every one of the first five passes is
+     * seen so. */
     crawl.tap(ms0515::Key::Right);
-    std::vector<std::vector<uint8_t>> frames;
-    auto last = crawl.view();
-    for (int f = 0; f < kTurnPasses * kTurnPace + 8; ++f) {
-        crawl.run(1);
-        auto now = crawl.view();
-        if (now == last && (frames.empty() || frames.back() != now)) {
-            frames.push_back(now);
-            crawl.png("turn" + std::to_string(frames.size()));
-        }
-        last = std::move(now);
-    }
-    MESSAGE("stable frames of the turn: " << frames.size());
-    CHECK(frames.size() >= 4);
-    /* Each kept frame is the one before moved left by four cells a
-     * pass - by eight or twelve when a pass went by between them. */
-    const auto slidBy = [&](const std::vector<uint8_t> &now, const std::vector<uint8_t> &before, int cells) {
+    const auto slidBy = [&](const std::vector<uint8_t> &now, int cells) {
         for (int y = 0; y < kViewRows; ++y)
-            for (int c = 0; c < kViewCells - cells; ++c)
-                if (now[(y * kViewCells + c) * 2] != before[(y * kViewCells + c + cells) * 2] ||
-                    now[(y * kViewCells + c) * 2 + 1] != before[(y * kViewCells + c + cells) * 2 + 1])
+            for (int c = 0; c + cells < kViewCells; ++c)
+                if (now[(y * kViewCells + c) * 2] != start[(y * kViewCells + c + cells) * 2] ||
+                    now[(y * kViewCells + c) * 2 + 1] != start[(y * kViewCells + c + cells) * 2 + 1])
                     return false;
         return true;
     };
-    int slides = 0;
-    for (std::size_t i = 1; i < frames.size(); ++i) {
-        CAPTURE(i);
-        bool slid = false;
-        for (int k = 4; k <= 20 && !slid; k += 4) slid = slidBy(frames[i], frames[i - 1], k);
-        CHECK(slid);
-        slides += slid;
+    int frames = 0, matched = 0;
+    bool seen[6] = {};
+    for (int f = 0; f < kTurnPasses * kTurnPace + 8; ++f) {
+        crawl.run(1);
+        const auto now = crawl.view();
+        if (now == start) continue;                    /* not begun yet */
+        ++frames;
+        crawl.png("turn" + std::to_string(f));
+        for (int p = 1; p <= 5; ++p)
+            if (slidBy(now, 4 * p)) { seen[p] = true; ++matched; break; }
     }
-    CHECK(slides + 1 == static_cast<int>(frames.size()));
+    MESSAGE("frames of the turn: " << frames << ", the start slid in " << matched);
+    for (int p = 1; p <= 5; ++p) { CAPTURE(p); CHECK(seen[p]); }
     settle(crawl);
     CHECK(crawl.view() != start);
     const auto turned = crawl.view();
@@ -462,12 +453,12 @@ void pace(ms0515::Key key, int frames, int movePace)
     CHECK(crawl.machine.emulator().isHires());
 }
 
-TEST_CASE("the pace: a pass of a turn in five frames, turning round and round") {
+TEST_CASE("the pace: a pass of a turn in two frames, turning round and round") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     pace(ms0515::Key::Right, 150, kTurnPace);
 }
 
-TEST_CASE("the pace: a pass of a step in five frames, walking the corridor") {
+TEST_CASE("the pace: a pass of a step in four frames, walking the corridor") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     pace(ms0515::Key::Up, 150, kStepPace);
 }
