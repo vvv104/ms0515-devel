@@ -12,6 +12,7 @@
 #include "Crawl.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <sstream>
@@ -403,6 +404,57 @@ TEST_CASE("a corner with a farther one straight behind it, and the floor's lines
     CHECK(black(crawl, 64, 77));
     CHECK(black(crawl, 64, 42));
     CHECK(black(crawl, 65, 76));
+}
+
+TEST_CASE("the map: a cell a byte, the arrow yellow alone, the same arrow every way") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    /* The map's cells are a byte wide and six rows down, 12 across and
+     * 9 down from row 142; the party's is the seventh across, the fifth
+     * down - byte 20, rows 166..171.  A byte has one ink, so only the
+     * party's cell is yellow: the cells either side keep the walls'
+     * white whatever they are. */
+    const auto arrow = [&] {
+        std::array<uint8_t, 6> rows{};
+        for (int i = 0; i < 6; ++i) rows[i] = crawl.cell(20, 166 + i)[0];
+        return rows;
+    };
+    const auto flip = [](std::array<uint8_t, 6> a) { std::reverse(a.begin(), a.end()); return a; };
+    const auto mirror = [](std::array<uint8_t, 6> a) {
+        for (auto &b : a) {
+            uint8_t m = 0;
+            for (int i = 0; i < 8; ++i) if (b & (1 << i)) m |= static_cast<uint8_t>(0x80 >> i);
+            b = m;
+        }
+        return a;
+    };
+    std::array<std::array<uint8_t, 6>, 4> way{};      /* east, south, west, north */
+    for (int w = 0; w < 4; ++w) {
+        CAPTURE(w);
+        for (int i = 0; i < 6; ++i) {
+            CHECK(crawl.cell(20, 166 + i)[1] == 0x46);
+            CHECK(crawl.cell(19, 166 + i)[1] == 0x07);
+            CHECK(crawl.cell(21, 166 + i)[1] == 0x07);
+        }
+        way[w] = arrow();
+        crawl.tap(ms0515::Key::Right);
+        settle(crawl);
+    }
+    crawl.png("mapArrow");
+    CHECK(way[0] == flip(way[0]));                      /* east and west even top and bottom */
+    CHECK(way[2] == mirror(way[0]));                    /* west east's mirror */
+    CHECK(way[3] == mirror(way[3]));                    /* north and south even left and right */
+    CHECK(way[1] == flip(way[3]));                      /* south north upside down */
+    /* Each comes to a point the way it goes: east's last column and
+     * north's top row hold the fewest pixels of the arrow. */
+    int last = 0, first = 0;
+    for (int i = 0; i < 6; ++i) last += way[0][i] & 1;
+    for (int i = 0; i < 8; ++i) first += (way[3][0] >> i) & 1;
+    CHECK(last == 2);
+    CHECK(first == 2);
+    CHECK(way[0][2] == 0xFF);                           /* the shaft along the cell */
+    CHECK((way[3][5] & 0x18) == 0x18);
 }
 
 TEST_CASE("a turn slides the picture four columns a pass; four of them come round to the start") {

@@ -31,8 +31,8 @@ struct hero {
 void hud_frame(void);
 /* A hero's panel: slot 0..3, the face, the name, the bars. */
 void hud_hero(int slot, const struct hero *h);
-/* The map round the party: the cells of the level, four pixels each,
- * 24 across by 14 down, the party's cell in the middle as an arrow
+/* The map round the party: the cells of the level, a byte each,
+ * 12 across by 9 down, six rows tall, the party's cell in the middle as an arrow
  * pointing the way it faces (angle in 256ths of a turn, 0 east); the
  * map slides under the arrow as the party moves. */
 void hud_map(int cellX, int cellY, int angle);

@@ -57,53 +57,45 @@ void hud_hero(int slot, const struct hero *h)
 }
 
 #define MAP_CELL 14			/* the map's ground: cells 14..25, rows 140..197 */
-#define MAP_ROW 140
-#define MAP_ACROSS 24			/* cells of the level shown, 4 pixels each */
-#define MAP_DOWN 14
+#define MAP_ROW 142
+#define MAP_ACROSS 12			/* cells of the level shown, a byte each */
+#define MAP_DOWN 9
+#define MAP_TALL 6			/* rows a cell: as tall as a byte is wide */
 
-/* The arrow of the party's way, 4 by 4 pixels, a nibble a row: east,
- * south, west, north. */
-static const unsigned char arrows[4][4] = {
-	{0x8, 0xC, 0xE, 0xC}, {0x6, 0x6, 0xF, 0x6}, {0x1, 0x3, 0x7, 0x3}, {0x6, 0xF, 0x6, 0x6},
+/* The arrow of the party's way, a byte a row: east, south, west, north
+ * - one arrow turned, its head three steps of two pixels, its shaft two
+ * wide. */
+static const unsigned char arrows[4][MAP_TALL] = {
+	{0x30, 0x3C, 0xFF, 0xFF, 0x3C, 0x30},
+	{0x18, 0x18, 0x18, 0x7E, 0x3C, 0x18},
+	{0x0C, 0x3C, 0xFF, 0xFF, 0x3C, 0x0C},
+	{0x18, 0x3C, 0x7E, 0x18, 0x18, 0x18},
 };
 
-/* A row of the map's cells as bytes, two cells a byte, a nibble each:
- * the level's row my from column mx on, nothing past the level's edge.
- * Straight off the level, since the map is drawn whole at every step. */
-static void mapRow(int mx, int my, unsigned char *bytes)
-{
-	const char *cell = my >= 0 && my < MAP_SIDE ? map_rows[my] + mx : 0;
-	int q;
-
-	for (q = 0; q < MAP_ACROSS / 2; q++, cell += 2, mx += 2) {
-		unsigned char b = 0;
-
-		if (cell) {
-			if (mx >= 0 && mx < MAP_SIDE && MAP_WALL(cell[0]))
-				b = 0xF0;
-			if (mx + 1 >= 0 && mx + 1 < MAP_SIDE && MAP_WALL(cell[1]))
-				b |= 0x0F;
-		}
-		bytes[q] = b;
-	}
-}
-
+/* The map is drawn whole at every step, straight off the level: a
+ * cell is a byte, so each has its own ink - white the walls, yellow the
+ * party's arrow alone. */
 void hud_map(int cellX, int cellY, int angle)
 {
 	const unsigned char *arrow = arrows[((angle + 32) >> 6) & 3];
-	unsigned char bytes[MAP_ACROSS / 2];
+	const char *cell;
 	unsigned char *p;
-	int r, q, i;
+	int r, q, i, mx, my;
 
 	for (r = 0; r < MAP_DOWN; r++) {
-		mapRow(cellX - MAP_ACROSS / 2, cellY - MAP_DOWN / 2 + r, bytes);
-		for (i = 0; i < 4; i++) {
-			if (r == MAP_DOWN / 2)		/* the party's cell: the arrow, a row of it */
-				bytes[MAP_ACROSS / 4] = (unsigned char)((bytes[MAP_ACROSS / 4] & 0x0F) | (arrow[i] << 4));
-			p = ms_row(MAP_ROW + r * 4 + i) + (MAP_CELL << 1);
-			for (q = 0; q < MAP_ACROSS / 2; q++, p += 2) {
-				p[0] = bytes[q];
-				p[1] = (unsigned char)(r == MAP_DOWN / 2 && q == MAP_ACROSS / 4 ? MS_INK(6) | MS_BRIGHT : MS_INK(7));
+		my = cellY - MAP_DOWN / 2 + r;
+		for (i = 0; i < MAP_TALL; i++) {
+			p = ms_row(MAP_ROW + r * MAP_TALL + i) + (MAP_CELL << 1);
+			mx = cellX - MAP_ACROSS / 2;
+			cell = my >= 0 && my < MAP_SIDE ? map_rows[my] + mx : 0;
+			for (q = 0; q < MAP_ACROSS; q++, p += 2, mx++) {
+				p[0] = cell && mx >= 0 && mx < MAP_SIDE && MAP_WALL(cell[q]) ? 0xFF : 0x00;
+				p[1] = MS_INK(7);
+			}
+			if (r == MAP_DOWN / 2) {	/* the party's cell: the arrow, a row of it */
+				p -= 2 * (MAP_ACROSS - MAP_ACROSS / 2);
+				p[0] = arrow[i];
+				p[1] = MS_INK(6) | MS_BRIGHT;
 			}
 		}
 	}
