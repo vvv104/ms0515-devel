@@ -343,7 +343,7 @@ TEST_CASE("PORTS: the joystick, the border, the speaker and the banks") {
  * cell by cell; the glyphs compared with the font found in the ROM the
  * machine carries, by the shape of '0' and of the Cyrillic A as the
  * library finds them. */
-TEST_CASE("DRAW: ms_vfill, ms_fill, ms_blit, ms_text in the ROM's font, ms_vput, the masked ones, ms_hscroll") {
+TEST_CASE("DRAW: ms_vfill, ms_fill, ms_blit, ms_text in the ROM's font, ms_vput, the masked and the folded ones, ms_hscroll") {
     if (!built("DRAW")) { MESSAGE("DRAW.SAV not built - skipped"); return; }
     Driven d("DRAW");
     d.run(80);
@@ -428,6 +428,15 @@ TEST_CASE("DRAW: ms_vfill, ms_fill, ms_blit, ms_text in the ROM's font, ms_vput,
         CHECK(cell(36, 10 + r)[1] == 0x10 + r);
     }
     CHECK(cell(35, 22)[0] == 0);
+    for (int k = 0; k < 6; ++k) {                               /* ms_vput_folded: down from row 30 and up from 29 */
+        CAPTURE(k);
+        CHECK(cell(37, 30 + k)[0] == k + 1);
+        CHECK(cell(37, 30 + k)[1] == 0x10 + k);
+        CHECK(cell(37, 29 - k)[0] == k + 1);
+        CHECK(cell(37, 29 - k)[1] == 0x10 + k);
+    }
+    CHECK(cell(37, 36)[0] == 0);
+    CHECK(cell(37, 23)[0] == 0);
     const uint8_t right[6] = {1, 2, 1, 2, 3, 4}, left[6] = {4, 5, 6, 4, 5, 6};
     for (int i = 0; i < 6; ++i)
         for (int r = 0; r < 3; ++r) {

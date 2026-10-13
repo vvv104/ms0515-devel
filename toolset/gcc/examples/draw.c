@@ -44,6 +44,7 @@ int main(void)
 	ms_vput_mirror(33, 10, 4, column);		/* the pixels turned round */
 	ms_fill(34, 10, 34, 13, 0xFF, MS_INK(7));
 	ms_vput_mirror_masked(34, 10, 4, column, 0xF0);	/* the left half of the mirror */
+	ms_vput_folded(37, 30, 6, twelve);		/* rows 30..35, and 29..24 turned over */
 	for (i = 0; i < 6; i++) {			/* two boxes of six cells, a cell a number */
 		ms_fill(20 + i, 70, 20 + i, 72, (unsigned char)(i + 1), (unsigned char)(i + 1));
 		ms_fill(20 + i, 74, 20 + i, 76, (unsigned char)(i + 1), (unsigned char)(i + 1));

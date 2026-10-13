@@ -83,6 +83,10 @@ void ms_vput_masked(int c, int y0, int rows, const void *words, unsigned char ma
  * on the other side, a sprite facing the other way. */
 void ms_vput_mirror(int c, int y0, int rows, const void *words);
 void ms_vput_mirror_masked(int c, int y0, int rows, const void *words, unsigned char mask);
+/* A column the same upside down about the line above row y: word k put
+ * at row y + k and at row y - 1 - k - a view whose ceiling is its floor
+ * turned over, drawn by its lower half. */
+void ms_vput_folded(int c, int y, int rows, const void *words);
 /* A byte's bits in the other order: ms_reverse[0x80 >> i] is 1 << i. */
 extern const unsigned char ms_reverse[256];
 /* Column c, rows y0..y1: the pixels under `mask` set from `pixels`, the
