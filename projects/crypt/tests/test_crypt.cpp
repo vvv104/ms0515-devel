@@ -146,10 +146,57 @@ TEST_CASE("the screen: the view's edges, the band, the party, the buttons") {
     CHECK(lit(crawl) > 100);                            /* the edges */
     for (int c = 0; c < kViewCells; c += 7)
         for (int r = 0; r < kViewRows; r += 17) { CAPTURE(c); CAPTURE(r); CHECK(crawl.cell(c, kViewTop + r)[1] == kPaper); }
-    CHECK(crawl.cell(1, 0)[1] == 0x0F);                 /* the band's text: white on blue */
-    CHECK(crawl.cell(23, 45)[1] == 0x78);               /* a face: its skin bright white under the nose's black */
-    CHECK(crawl.cell(22, 62)[1] == 0x42);               /* a full hit-point bar: bright red */
-    CHECK(crawl.cell(2, 150)[1] == 0x4E);               /* a button's yellow label on bright blue */
+    CHECK(crawl.cell(1, 4)[1] == 0x0F);                 /* the band's text: white on blue */
+    for (int c = 0; c < 40; ++c)                        /* the title alone in the middle of the band */
+        for (int r : {0, 3, 12, 15}) { CAPTURE(c); CAPTURE(r); CHECK(crawl.cell(c, r)[0] == 0); }
+}
+
+TEST_CASE("the panels: framed, the name plain to see, the bars either side of the face; the buttons framed, their labels in the middle") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    /* A hero's panel is eight cells across, ARNO's 23..30, OTTO's
+     * 32..39, a cell of the blue between; rows 17..74 for the first two,
+     * a line round them bright white on black. */
+    CHECK(crawl.cell(22, 40)[0] == 0x00);               /* the blue between the view and the panels */
+    CHECK((crawl.cell(22, 40)[1] & 0x38) == 0x08);
+    CHECK(crawl.cell(31, 40)[0] == 0x00);               /* and between the panels */
+    for (int c = 23; c <= 30; ++c) { CAPTURE(c); CHECK(crawl.cell(c, 17)[0] == 0xFF); CHECK(crawl.cell(c, 74)[0] == 0xFF); }
+    CHECK(crawl.cell(23, 40)[0] == 0x80);               /* the left side, the right */
+    CHECK(crawl.cell(30, 40)[0] == 0x01);
+    CHECK(crawl.cell(23, 40)[1] == 0x47);
+    /* The name white on black in the middle: ARNO four cells, 25..28. */
+    CHECK(crawl.cell(25, 26)[1] == 0x47);
+    CHECK(crawl.cell(24, 26)[0] == 0x00);
+    CHECK(crawl.cell(29, 26)[0] == 0x00);
+    /* The face in the middle, 25..28, rows 35..66: its skin bright white
+     * under the nose's black. */
+    CHECK(crawl.cell(26, 52)[1] == 0x78);
+    /* The hit points left of it, the mana right, from the bottom up,
+     * the empty part dim: ARNO's full, OTTO's mana half, ARNO none. */
+    for (int r = 35; r <= 66; ++r) {
+        CAPTURE(r);
+        CHECK(crawl.cell(24, r)[0] == 0x3C);
+        CHECK(crawl.cell(24, r)[1] == 0x42);
+        CHECK(crawl.cell(29, r)[0] == 0x00);
+        CHECK(crawl.cell(38, r)[0] == 0x3C);
+        CHECK(crawl.cell(38, r)[1] == (r < 51 ? 0x01 : 0x41));
+    }
+    /* The buttons: a line round each, bright white on bright blue, the
+     * label yellow in the middle - "<" in cells 1..3 its middle one,
+     * WAIT in 27..38 cells 31..34. */
+    CHECK(crawl.cell(1, 150)[0] == 0x80);
+    CHECK(crawl.cell(3, 150)[0] == 0x01);
+    CHECK(crawl.cell(2, 150)[1] == 0x4E);
+    CHECK(crawl.cell(2, 140)[0] == 0xFF);
+    for (int c = 31; c <= 34; ++c) { CAPTURE(c); CHECK(crawl.cell(c, 180)[1] == 0x4E); }
+    CHECK(crawl.cell(30, 180)[0] == 0x00);
+    CHECK(crawl.cell(35, 180)[0] == 0x00);
+    CHECK(crawl.cell(27, 180)[0] == 0x80);
+    CHECK(crawl.cell(38, 180)[0] == 0x01);
+    CHECK(crawl.cell(29, 150)[1] == 0x4E);              /* HIT in 27..31: 28..30 */
+    CHECK(crawl.cell(36, 150)[1] == 0x4E);              /* MAG in 34..38: 35..37 */
+    crawl.png("panels");
 }
 
 TEST_CASE("the left wall's top and foot run straight to the horizon, pixel by pixel") {
@@ -243,8 +290,8 @@ TEST_CASE("a step forward runs the seams along the walls and moves no edge") {
     }
     CHECK(changes >= kStepPasses - 1);                  /* shown in parts, not one jump */
     CHECK(crawl.view() == still);                       /* a cell on, the same four cells of corridor ahead */
-    CHECK(crawl.cell(20, 168)[1] == 0x46);              /* the map: the party's arrow, yellow */
-    CHECK(crawl.cell(20, 168)[0] != 0);
+    CHECK(crawl.cell(19, 168)[1] == 0x46);              /* the map: the party's arrow, yellow */
+    CHECK(crawl.cell(19, 168)[0] != 0);
 }
 
 TEST_CASE("six steps on and six back leave the picture as it was") {
@@ -410,14 +457,14 @@ TEST_CASE("the map: a cell a byte, the arrow yellow alone, the same arrow every 
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
-    /* The map's cells are a byte wide and six rows down, 12 across and
-     * 9 down from row 142; the party's is the seventh across, the fifth
-     * down - byte 20, rows 166..171.  A byte has one ink, so only the
+    /* The map's cells are a byte wide and six rows down, 11 across and
+     * 9 down from row 142; the party's is the middle one, the sixth
+     * across, the fifth down - byte 19, rows 166..171.  A byte has one ink, so only the
      * party's cell is yellow: the cells either side keep the walls'
      * white whatever they are. */
     const auto arrow = [&] {
         std::array<uint8_t, 6> rows{};
-        for (int i = 0; i < 6; ++i) rows[i] = crawl.cell(20, 166 + i)[0];
+        for (int i = 0; i < 6; ++i) rows[i] = crawl.cell(19, 166 + i)[0];
         return rows;
     };
     const auto flip = [](std::array<uint8_t, 6> a) { std::reverse(a.begin(), a.end()); return a; };
@@ -433,9 +480,9 @@ TEST_CASE("the map: a cell a byte, the arrow yellow alone, the same arrow every 
     for (int w = 0; w < 4; ++w) {
         CAPTURE(w);
         for (int i = 0; i < 6; ++i) {
-            CHECK(crawl.cell(20, 166 + i)[1] == 0x46);
-            CHECK(crawl.cell(19, 166 + i)[1] == 0x07);
-            CHECK(crawl.cell(21, 166 + i)[1] == 0x07);
+            CHECK(crawl.cell(19, 166 + i)[1] == 0x46);
+            CHECK(crawl.cell(18, 166 + i)[1] == 0x07);
+            CHECK(crawl.cell(20, 166 + i)[1] == 0x07);
         }
         way[w] = arrow();
         crawl.tap(ms0515::Key::Right);

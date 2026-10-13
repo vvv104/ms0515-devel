@@ -34,16 +34,16 @@ runs in WSL and `ms0515-run.exe` from there.
 ```
  0        10        20        30       39
  +--------------------------------------+ 0
- | the place, the day, the last message | 0-15    two lines of text
+ | the place, the day                   | 0-15    a line of text
  +----------------------+---------------+ 16
- |                      | hero 1 | hero 2|
- |   the view, 22 cells | face   | face  | 16-75   faces of 32x32, names,
- |   by 120 rows        +--------+-------+ 76      bars of life and mana
- |                      | hero 3 | hero 4|
- |                      |        |       | 76-135
+ |                      | hero 1 | hero 2|  boxes of 8 cells, a line
+ |   the view, 22 cells | face   | face  |  round each: the name, the
+ |   by 120 rows        +--------+-------+  face of 32x32, the bar of
+ |                      | hero 3 | hero 4|  life left of it, of mana
+ |                      |        |       |  right
  +------+---------------+--------+-------+ 136
  | turn | the map, the  | attack | spell |
- | step | party mid-way | wait   |       | 136-199
+ | step | party mid-way |      wait      | 136-199
  +------+---------------+----------------+
 ```
 

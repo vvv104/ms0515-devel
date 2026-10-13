@@ -240,7 +240,6 @@ int main(void)
 	ms_keys_begin();
 	hud_frame();
 	hud_title("THE CRYPT", 1);
-	hud_message("THE AIR IS COLD AND STILL.");
 	for (i = 0; i < 4; i++)
 		hud_hero(i, &heroes[i]);
 	mapped();

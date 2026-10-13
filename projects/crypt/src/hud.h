@@ -5,16 +5,16 @@
  *
  *    0        10        20        30       39
  *    +--------------------------------------+ 0
- *    | the place, the day, the last message | 0-15    two lines of text
+ *    | the place, the day                   | 0-15    a line of text
  *    +----------------------+---------------+ 16
- *    |                      | hero 1 | hero 2|
- *    |   the view, 22 cells | face   | face  | 16-75   faces of 32x32,
- *    |   by 120 rows        +--------+-------+ 76      names, bars
- *    |                      | hero 3 | hero 4|
- *    |                      |        |       | 76-135
+ *    |                      | hero 1 | hero 2|  boxes of 8 cells, 23..30
+ *    |   the view, 22 cells |        |       |  and 32..39, a cell of blue
+ *    |   by 120 rows        +--------+-------+  between: the name, the
+ *    |                      | hero 3 | hero 4|  face of 32x32, the hit
+ *    |                      |        |       |  points left, the mana right
  *    +------+---------------+--------+-------+ 136
- *    | turn | the map and   | attack | spell |
- *    | step | the compass   | wait   |       | 136-199
+ *    | turn | the map,      | attack | spell |
+ *    | step | 11 cells      |      wait      | 136-199
  *    +------+---------------+----------------+
  */
 
@@ -36,9 +36,7 @@ void hud_hero(int slot, const struct hero *h);
  * pointing the way it faces (angle in 256ths of a turn, 0 east); the
  * map slides under the arrow as the party moves. */
 void hud_map(int cellX, int cellY, int angle);
-/* The place's name and the day on the band's first line, a message on
- * its second. */
+/* The place's name and the day in the middle of the band. */
 void hud_title(const char *place, int day);
-void hud_message(const char *text);
 
 #endif

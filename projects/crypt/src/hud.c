@@ -7,15 +7,35 @@
 #include "map.h"
 
 #define BAND MS_INK(7) | MS_PAPER(1)		/* white on blue */
-#define FRAME 0x00, MS_PAPER(1)			/* a blue box */
-#define BUTTON 0x00, MS_PAPER(1) | MS_BRIGHT
+#define FRAME 0x00, MS_PAPER(1)			/* the blue between the boxes */
+#define LINE MS_INK(7) | MS_BRIGHT		/* a box's line, bright white */
+#define LABEL MS_INK(6) | MS_PAPER(1) | MS_BRIGHT	/* yellow on bright blue */
 #define PANEL_TOP(slot) (16 + ((slot) >> 1) * 60)
-#define PANEL_LEFT(slot) (22 + ((slot) & 1) * 9)
+#define PANEL_LEFT(slot) (23 + ((slot) & 1) * 9)
+#define PANEL_CELLS 8
 
-static void button(int c, int y, const char *label)
+/* A box of cells c..c + w - 1, rows y..y + h - 1, a line of a pixel
+ * round it on the ground of `paper`: across its first and last rows,
+ * down the outer pixel of its first and last cells. */
+static void box(int c, int y, int w, int h, unsigned char paper)
 {
-	ms_fill(c, y, c + 3, y + 27, BUTTON);
-	ms_text(c + 1, y + 10, label, MS_INK(6) | MS_PAPER(1) | MS_BRIGHT);
+	ms_fill(c, y, c + w - 1, y + h - 1, 0x00, paper);
+	ms_fill(c, y, c + w - 1, y, 0xFF, LINE | paper);
+	ms_fill(c, y + h - 1, c + w - 1, y + h - 1, 0xFF, LINE | paper);
+	ms_fill(c, y + 1, c, y + h - 2, 0x80, LINE | paper);
+	ms_fill(c + w - 1, y + 1, c + w - 1, y + h - 2, 0x01, LINE | paper);
+}
+
+/* A button w cells wide, its label in the middle: w less the label's
+ * length is even. */
+static void button(int c, int y, int w, const char *label)
+{
+	int n = 0;
+
+	while (label[n])
+		n++;
+	box(c, y, w, 28, MS_PAPER(1) | MS_BRIGHT);
+	ms_text(c + (w - n) / 2, y + 10, label, LABEL);
 }
 
 void hud_frame(void)
@@ -23,42 +43,54 @@ void hud_frame(void)
 	ms_fill(0, 0, 39, 15, 0x00, MS_PAPER(1));			/* the band */
 	ms_fill(22, 16, 39, 135, FRAME);				/* behind the heroes */
 	ms_fill(0, 136, 39, 199, FRAME);				/* the bottom */
-	button(1, 140, "<");					/* turn left, step, turn right */
-	button(5, 140, "^");
-	button(9, 140, ">");
-	button(1, 170, "[");					/* step left, back, step right */
-	button(5, 170, "v");
-	button(9, 170, "]");
-	ms_fill(14, 140, 25, 197, 0x00, MS_PAPER(0));		/* the map's ground */
-	button(28, 140, "HIT");					/* the actions */
-	button(33, 140, "MAG");
-	button(28, 170, "WAIT");
+	button(1, 140, 3, "<");					/* turn left, step, turn right */
+	button(5, 140, 3, "^");
+	button(9, 140, 3, ">");
+	button(1, 170, 3, "[");					/* step left, back, step right */
+	button(5, 170, 3, "v");
+	button(9, 170, 3, "]");
+	ms_fill(14, 140, 24, 197, 0x00, MS_PAPER(0));		/* the map's ground */
+	button(27, 140, 5, "HIT");					/* the actions */
+	button(34, 140, 5, "MAG");
+	button(27, 170, 12, "WAIT");
 }
 
+/* A bar standing in cell c from row y, 32 rows tall, filled from the
+ * bottom as value is of max, bright `ink` so far and dim above; none
+ * when max is 0. */
 static void bar(int c, int y, int value, int max, unsigned char ink)
 {
-	int cells = max > 0 ? (value * 8 + max - 1) / max : 0;	/* of 8 cells */
+	int rows = max > 0 ? (value * 32 + max - 1) / max : 0;
 
-	if (cells > 8)
-		cells = 8;
-	ms_fill(c, y, c + 7, y + 2, 0x00, MS_PAPER(0));
-	if (cells > 0)
-		ms_fill(c, y, c + cells - 1, y + 2, 0xFF, ink);
+	if (max <= 0)
+		return;
+	if (rows > 32)
+		rows = 32;
+	if (rows < 32)
+		ms_fill(c, y, c, y + 31 - rows, 0x3C, ink);
+	if (rows > 0)
+		ms_fill(c, y + 32 - rows, c, y + 31, 0x3C, ink | MS_BRIGHT);
 }
 
+/* A hero's panel: a box of eight cells, the name in the middle at the
+ * top, the face under it, the hit points left of the face and the mana
+ * right. */
 void hud_hero(int slot, const struct hero *h)
 {
-	int c = PANEL_LEFT(slot), y = PANEL_TOP(slot);
+	int c = PANEL_LEFT(slot), y = PANEL_TOP(slot), n = 0;
 
-	ms_text(c, y + 2, h->name, MS_INK(7) | MS_PAPER(1) | MS_BRIGHT);
-	ms_blit(h->face, c, y + 12);
-	bar(c, y + 46, h->hp, h->hpMax, MS_INK(2) | MS_BRIGHT);
-	bar(c, y + 51, h->mana, h->manaMax, MS_INK(1) | MS_BRIGHT);
+	while (h->name[n])
+		n++;
+	box(c, y + 1, PANEL_CELLS, 58, MS_PAPER(0));
+	ms_text(c + (PANEL_CELLS - n) / 2, y + 7, h->name, MS_INK(7) | MS_PAPER(0) | MS_BRIGHT);
+	ms_blit(h->face, c + 2, y + 19);
+	bar(c + 1, y + 19, h->hp, h->hpMax, MS_INK(2));
+	bar(c + 6, y + 19, h->mana, h->manaMax, MS_INK(1));
 }
 
-#define MAP_CELL 14			/* the map's ground: cells 14..25, rows 140..197 */
+#define MAP_CELL 14			/* the map's ground: cells 14..24, rows 140..197 */
 #define MAP_ROW 142
-#define MAP_ACROSS 12			/* cells of the level shown, a byte each */
+#define MAP_ACROSS 11			/* cells of the level shown, a byte each, the party's the middle */
 #define MAP_DOWN 9
 #define MAP_TALL 6			/* rows a cell: as tall as a byte is wide */
 
@@ -101,7 +133,7 @@ void hud_map(int cellX, int cellY, int angle)
 	}
 }
 
-/* The band's first line: the place, to 30 letters, and the day.  Put
+/* The band's line: the place, to 30 letters, and the day.  Put
  * together by hand: strlen and memcpy would bring the whole of the
  * runtime's string.c into a program short of room. */
 void hud_title(const char *place, int day)
@@ -119,12 +151,6 @@ void hud_title(const char *place, int day)
 	line[n++] = (char)('0' + day / 10);
 	line[n++] = (char)('0' + day % 10);
 	line[n] = 0;
-	ms_fill(0, 0, 39, 7, 0x00, MS_PAPER(1));
-	ms_text(1, 0, line, BAND);
-}
-
-void hud_message(const char *text)
-{
-	ms_fill(0, 8, 39, 15, 0x00, MS_PAPER(1));
-	ms_text(1, 8, text, BAND);
+	ms_fill(0, 0, 39, 15, 0x00, MS_PAPER(1));
+	ms_text(1, 4, line, BAND);
 }
