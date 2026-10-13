@@ -321,7 +321,8 @@ static void sideFaces(int n, const unsigned char *walls)
 		}
 }
 
-/* What no wall nearer than the far edge of row VIEW_DEPTH takes: black
+/* What no wall up to the far edge of row VIEW_DEPTH takes - the far
+ * walls of that row's cells are theirs, and drawn - is black
  * from that edge's row on the floor to its mirror on the ceiling, a
  * wall of darkness standing there, as tall as the floor's edge has it
  * in each column. */
@@ -379,6 +380,10 @@ static void visibility(int first, int last)
 			before[j] = walls[j];
 	}
 	flushAll(n - 1);
+	if (uncovered > 0 && n > VIEW_DEPTH) {
+		rowWalls(walls);	/* the far walls of row VIEW_DEPTH's cells are theirs */
+		frontFaces(n, walls, before);
+	}
 	if (uncovered > 0)
 		dark();
 }

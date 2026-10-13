@@ -332,6 +332,43 @@ TEST_CASE("past four rows of cells ahead the view is dark") {
     }
 }
 
+TEST_CASE("the far walls of the fourth row's cells are theirs: drawn, not dark") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    using K = ms0515::Key;
+    const auto walk = [&](K turn, int steps) {
+        if (turn != K::Up) { crawl.tap(turn); settle(crawl); }
+        for (int i = 0; i < steps; ++i) { crawl.tap(K::Up); settle(crawl); }
+    };
+    walk(K::Up, 8);             /* (9, 1) */
+    walk(K::Right, 6);          /* south to (9, 7) */
+    walk(K::Right, 2);          /* west to (7, 7) */
+    walk(K::Left, 2);           /* south to (7, 9) */
+    walk(K::Right, 6);          /* west to (1, 9) */
+    walk(K::Left, 6);           /* south to (1, 15) */
+    walk(K::Left, 9);           /* east to (10, 15) */
+    walk(K::Right, 2);          /* south to (10, 17) */
+    walk(K::Right, 5);          /* west to (5, 17) */
+    crawl.png("farWalls");
+    /* At (5, 17) facing west four cells of floor lead to a wall five
+     * cells on, its face on the far edge of the fourth row, with an
+     * opening on the left in that row onto a corridor going south,
+     * walls behind it too.  Every one of them is a far wall of a cell
+     * of the fourth row, drawn: none of the view is dark - about the
+     * horizon only the lines down the corners, never four black pixels
+     * side by side. */
+    for (int r = 50; r < 70; ++r) {
+        int run = 0, longest = 0;
+        for (int x = 0; x < kViewCells * 8; ++x) {
+            run = black(crawl, x, r) ? run + 1 : 0;
+            longest = run > longest ? run : longest;
+        }
+        CAPTURE(r);
+        CHECK(longest < 4);
+    }
+}
+
 TEST_CASE("a corner with a farther one straight behind it, and the floor's lines up to the wall they meet") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;

@@ -81,7 +81,8 @@ pixel.  Nearer than four pixels to a line drawn no other seam between
 cells is: far away the cells crowd, and only the first of a crowd
 shows; a face's own edge, the shape of the place, gives way only to a
 line beside it.  The view looks four rows of cells ahead and no
-farther: what no wall nearer takes is dark, a black wall standing on
+farther: the far walls of the fourth row's cells are theirs and drawn,
+and what no wall takes up to them is dark, a black wall standing on
 the far edge of the fourth row, and nothing past it is worked out - nor
 anything a wall hides.  The machine's cells of eight pixels have two colours,
 and that is why the view is one colour with black lines: a fill that
@@ -141,7 +142,7 @@ to the horizon, pixel by pixel, against the cylinder's own sum; the
 seams where the cells' corners fall, the floor's edge across right up
 to the wall's foot and not into the wall, and the ceiling's its
 mirror; the wall ahead's foot one line with the floor's edge under
-it; past four cells dark; a corner with a farther one straight behind
+it; past four cells dark, the fourth row's far walls drawn; a corner with a farther one straight behind
 it a line, and the floor's lines meeting the wall they run to; a step
 that runs the seams and moves no edge; six steps on
 and six back, and a turn there and back, leaving the picture as it
