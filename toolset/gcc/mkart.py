@@ -8,7 +8,7 @@ pixels: an attribute byte of ink and paper over a byte of pixels.  Each
 pixel of the PNG goes to the nearest of the fifteen colours (black, the
 seven at 2/3 and the seven at full), and in every cell the commonest
 colour becomes the paper, the next the ink and the rest fall to the
-nearer of the two; bright is the ink's.
+nearer of the two; bright is the ink's, or the paper's under black ink.
 
 A `tex` (rt11_devel/toolset/gcc/include/tex.h) is a texture or a sprite
 drawn scaled: the PNG's width a multiple of 8, its height up to 255,
@@ -75,6 +75,8 @@ def cell(pixels, key):
             if dk < dp:
                 pattern |= 0x80 >> i
     inkCode, bright = code(ink)
+    if ink == 0:                    # black ink: the paper says how bright the cell is
+        bright = code(paper)[1]
     paperCode, _ = code(paper)
     attribute = inkCode | (paperCode << 3) | (0o100 if bright else 0)
     return pattern, attribute

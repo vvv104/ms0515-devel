@@ -147,7 +147,7 @@ TEST_CASE("the screen: the view's edges, the band, the party, the buttons") {
     for (int c = 0; c < kViewCells; c += 7)
         for (int r = 0; r < kViewRows; r += 17) { CAPTURE(c); CAPTURE(r); CHECK(crawl.cell(c, kViewTop + r)[1] == kPaper); }
     CHECK(crawl.cell(1, 0)[1] == 0x0F);                 /* the band's text: white on blue */
-    CHECK(crawl.cell(23, 45)[1] == 0x76);               /* a face: bright yellow, the head's own cell */
+    CHECK(crawl.cell(23, 45)[1] == 0x78);               /* a face: its skin bright white under the nose's black */
     CHECK(crawl.cell(22, 62)[1] == 0x42);               /* a full hit-point bar: bright red */
     CHECK(crawl.cell(2, 150)[1] == 0x4E);               /* a button's yellow label on bright blue */
 }
