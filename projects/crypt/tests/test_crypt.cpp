@@ -89,14 +89,6 @@ bool seamAt(int x)
     return false;
 }
 
-/* The cosine of the middle of view column c in 8.8, as the tables
- * have it, at most 255 as the machine takes it. */
-int cosineOf(int c)
-{
-    const int cosine = static_cast<int>(std::lround(256 * std::cos(angleOf(c * 8 + 3))));
-    return cosine > 255 ? 255 : cosine;
-}
-
 /* The window row where the far edge of row n's cells crosses the
  * floor in view column c at the start, as geometry.py has it. */
 int crossRow(int c, int n)
@@ -198,14 +190,15 @@ TEST_CASE("every seam is a line: the cells' corners down the wall, the floor's a
     for (int r = 40; r < 80; r += 5) { CAPTURE(r); CHECK_FALSE(black(crawl, 46, r)); }
     /* The floor's nearest edge across runs as a row through each
      * column, bowing a little from column to column as the cylinder
-     * has it, right up to the wall's foot and not into the wall; the
-     * ceiling's is its mirror. */
+     * has it, right up to the wall's foot and not into the wall - the
+     * row right under the foot is the foot's; the ceiling's is its
+     * mirror. */
     for (int c = 0; c < 11; ++c) {
         const int row = crossRow(c, 1);
         for (int x = c * 8; x < c * 8 + 8; ++x) {
             const int half = wallHalf(x);
             CAPTURE(x); CAPTURE(row);
-            if (half == 0 || 59 + half < row) {
+            if (half == 0 || 60 + half < row) {
                 CHECK(black(crawl, x, row));
                 CHECK(black(crawl, x, 119 - row));
             } else if (59 + half > row && !seamAt(x)) {
@@ -274,23 +267,32 @@ TEST_CASE("up to the wall ahead: a frame, its corners where the side walls end, 
     for (int i = 0; i < 8; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }
     crawl.png("wallTwo");
     /* Two cells from the wall ahead it is a frame: its top row and
-     * its foot row across the middle columns, and its sides down view
-     * pixels 36 and 139, where the side walls' last cells end - the
-     * cell's near corners, 52 pixel columns either side of the middle
-     * (geometry.py edge_px). */
-    for (int c = 5; c < 17; ++c) {                     /* front_half 40 by each column's cosine */
-        const int half = (40 * cosineOf(c)) >> 8;
+     * its foot row across the middle columns, the foot the row above
+     * the floor's edge it stands on, and its sides down view pixels 36
+     * and 139, where the side walls' last cells end - the cell's near
+     * corners, 52 pixel columns either side of the middle (geometry.py
+     * edge_px). */
+    for (int c = 5; c < 17; ++c) {
+        const int half = crossRow(c, 1) - 60;
         for (int x = c * 8; x < c * 8 + 8; x += 3) {
             CAPTURE(x); CAPTURE(half);
             CHECK(black(crawl, x, 60 - half));
             CHECK(black(crawl, x, 59 + half));
+            /* The floor's edge under the wall is the wall's foot, one
+             * line, not a second one beside it; the ceiling's the
+             * same. */
+            for (int r = 60 + half; r < 63 + half; ++r) {
+                CAPTURE(r);
+                CHECK_FALSE(black(crawl, x, r));
+                CHECK_FALSE(black(crawl, x, 119 - r));
+            }
         }
     }
     /* Its left edge is the seam at pixel 36, where the left wall's last
      * cell ends; on the right the corridor opens, and the wall ahead
      * goes on past the opening as another cell's face: the seam between
      * the two at pixel 140, the first of the next face. */
-    const int half = (40 * cosineOf(4)) >> 8;
+    const int half = crossRow(4, 1) - 60;
     for (int r = 61 - half; r < 59 + half; ++r) {
         CAPTURE(r);
         CHECK(black(crawl, 36, r));
@@ -308,6 +310,31 @@ TEST_CASE("up to the wall ahead: a frame, its corners where the side walls end, 
     crawl.png("wallBack");
     MESSAGE("back from the turn, cells differing: " << differences(at, crawl.view()));
     CHECK(crawl.view() == at);
+}
+
+TEST_CASE("where a wall ends before one farther behind it, the corner is a line") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    crawl.tap(ms0515::Key::Right);                      /* to face south, down the corridor of the west side */
+    settle(crawl);
+    crawl.png("south");
+    /* The wall on the left runs five cells and ends 5.5 cells ahead,
+     * its corner 15 pixel columns left of the middle: its last pixel,
+     * view pixel 72, a line down it.  Past it an opening, and behind
+     * the opening a cell's face 6.5 ahead, which goes on behind the
+     * wall's end; then the wall ahead from pixel 75, its own edge. */
+    const int half = wallHalf(72) - 1;
+    for (int r = 61 - half; r < 59 + half; ++r) {
+        CAPTURE(r);
+        CHECK(black(crawl, 72, r));
+    }
+    for (int r = 54; r < 66; ++r) {
+        CAPTURE(r);
+        CHECK(black(crawl, 75, r));
+        CHECK_FALSE(black(crawl, 73, r));
+        CHECK_FALSE(black(crawl, 74, r));
+    }
 }
 
 TEST_CASE("a turn slides the picture four columns a pass; four of them come round to the start") {

@@ -70,12 +70,17 @@ The view is the dungeon's edges, in one colour on one: every seam of
 the world's squares, to the pixel.  A wall along the axis has its top
 and its foot a pixel in each column, a line on a slant; the seams
 between its cells, and its ends, stand down it where the corners
-fall.  A wall across the axis is a frame.  The floor's cells have
-their edges across the axis, a row in each column, and along it, a
-slant like a wall's foot; the ceiling the same upside down.  What a
-wall hides is not drawn.  Nearer than four pixels to a line drawn no
-other of its kind is: far away the cells crowd, and only the first of
-a crowd shows.  The machine's cells of eight pixels have two colours,
+fall.  A wall across the axis is a frame, standing on the floor's edge
+before it: its foot is the row above that edge, and the two are one
+line.  The floor's cells have their edges across the axis, a row in
+each column, and along it, a slant like a wall's foot; the ceiling the
+same upside down; an edge right under a wall's foot is the foot.  What
+a wall hides is not drawn, but where a wall ends with another farther
+behind it, the corner is the nearer one's, a line down its last
+pixel.  Nearer than four pixels to a line drawn no other seam between
+cells is: far away the cells crowd, and only the first of a crowd
+shows; a face's own edge, the shape of the place, gives way only to a
+line beside it.  The machine's cells of eight pixels have two colours,
 and that is why the view is one colour with black lines: a fill that
 met another on a slant would have to share a cell's row with the line
 between them, a third colour, and the line would have to go, or step
@@ -102,7 +107,7 @@ build time; what is there now is drawn by `art/placeholders.py` and
 stands in until real pictures come.
 
 What the machine does: a pass of a turn in 1.5 frames, a pass of a
-step in 4.8 - ten a second, half a second a step, four fifths a
+step in 4.7 - ten a second, half a second a step, four fifths a
 quarter turn.  On its way out the program prints how many passes it
 made in how many frames, and how many of them drew the view in how
 many; `-DPACE=n` sets one pace for everything, and `-DPROF=1` finds
@@ -111,7 +116,7 @@ screen, `-DPROF=3` clears and puts the columns without edges,
 `-DPROF=4` draws the walls' edges alone, for measuring the parts.  A
 pass of a step goes, by those: the finding of the pieces 0.9 frames,
 the columns cleared 0.8, put on the screen 0.7, the walls' edges 1.9,
-the floor's and the ceiling's 0.4.  The program is 39 blocks.  The project is C throughout; what the machine library
+the floor's and the ceiling's 0.4.  The program is 38 blocks.  The project is C throughout; what the machine library
 does in assembler (`ms_vput`, `ms_hscroll`) is the toolset's, with
 its tests.
 
@@ -127,7 +132,9 @@ edges, band, party and buttons; the left wall's top and foot straight
 to the horizon, pixel by pixel, against the cylinder's own sum; the
 seams where the cells' corners fall, the floor's edge across right up
 to the wall's foot and not into the wall, and the ceiling's its
-mirror; a step that runs the seams and moves no edge; two steps on
+mirror; the wall ahead's foot one line with the floor's edge under
+it; a wall ending before one farther behind, its corner a line; a step
+that runs the seams and moves no edge; two steps on
 and two back, and a turn there and back, leaving the picture as it
 was; the wall ahead as a frame with its seams; a turn that slides the
 picture four columns a pass, comes back exactly and comes round the

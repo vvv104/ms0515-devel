@@ -17,11 +17,15 @@
  * column keeps while the party steps along it: its top and its foot
  * are a pixel in each column, a line on a slant; the seams between
  * its cells, and its ends, stand down it where the corners fall.  A
- * wall across the axis is a frame.  The floor's cells have their edges
- * across the axis, a row in each column, and along it, a slant like a
- * wall's foot; the ceiling the same upside down.  What a wall hides
- * is not drawn.  Nearer than DETAIL pixels to a line drawn no other
- * is: far away the cells crowd, and only the first of a crowd shows. */
+ * wall across the axis is a frame, its foot the row above the floor's
+ * edge it stands on.  The floor's cells have their edges across the
+ * axis, a row in each column, and along it, a slant like a wall's
+ * foot; the ceiling the same upside down; an edge right under a wall's
+ * foot is the foot.  What a wall hides is not drawn; where a wall ends
+ * with another farther behind it, the corner is the nearer one's.
+ * Nearer than DETAIL pixels to a line drawn no other seam between
+ * cells is: far away the cells crowd, and only the first of a crowd
+ * shows; a face's own edge gives way only to a line beside it. */
 
 #include <fx.h>
 #include <ms0515.h>
@@ -53,10 +57,12 @@ struct piece {
 	unsigned char half;		/* kFront: rows above the horizon */
 };
 
-/* The columns of a range, at most the view's width: pieces[c - rangeFirst]. */
-static struct piece pieces[VIEW_CELLS][MAX_PIECES];
-static unsigned char count[VIEW_CELLS];
-static unsigned char covered[VIEW_CELLS];
+/* The columns of a range, at most the view's width and one more past
+ * it (the column after the last drawn, looked at for what goes on past
+ * a face's right edge): pieces[c - rangeFirst]. */
+static struct piece pieces[VIEW_CELLS + 1][MAX_PIECES];
+static unsigned char count[VIEW_CELLS + 1];
+static unsigned char covered[VIEW_CELLS + 1];
 
 static int cellX, cellY, phase;
 static int fx, fy, rx, ry;		/* the facing: forward and right, in cells */
@@ -192,7 +198,9 @@ static void sideFace(int x0, int x1, int lateral, int mirror, int from, int thro
 
 /* A wall across the axis: the near face of the cell j to the right
  * (left when j < 0), n rows ahead, between x0 and x1, as tall as its
- * depth allows in each column. */
+ * depth allows in each column - down to the row above the floor's
+ * edge it stands on, the far edge of row n - 1, where the table has
+ * that edge, so that the two are one line. */
 static void frontFace(int x0, int x1, int j, int n)
 {
 	struct piece *p;
@@ -208,7 +216,10 @@ static void frontFace(int x0, int x1, int j, int n)
 		p = take(c, m);
 		if (!p)
 			continue;
-		half = fx_mul8(frontHalfNow[n], col_cos[c] > 255 ? 255 : col_cos[c]);
+		if (n - 1 <= CROSS_DEPTH)
+			half = crossNow[n - 1][c] - HALF;	/* 255 below the window: a wall past it */
+		else
+			half = fx_mul8(frontHalfNow[n], col_cos[c] > 255 ? 255 : col_cos[c]);
 		p->kind = kFront;
 		p->half = (unsigned char)(half < 1 ? 1 : half > 255 ? 255 : half);
 		p->through = (signed char)n;
@@ -305,12 +316,15 @@ static void sideFaces(int n, const unsigned char *walls)
 		}
 }
 
-/* The pieces of the sector columns first..last found, front to back. */
+/* The pieces of the sector columns first..last found, front to back,
+ * and of the column after last, inside the sector. */
 static void visibility(int first, int last)
 {
 	unsigned char walls[2 * LATERALS + 1], before[2 * LATERALS + 1];
 	int c, n, j, s, L;
 
+	if (last < SECTOR_CELLS - 1)
+		last++;
 	rangeFirst = first;
 	rangeLast = last;
 	for (c = first; c <= last; c++) {
@@ -378,41 +392,93 @@ static void vline(int i, int a, int b)
 
 /* A seam of the wall at sector pixel column x, if it falls in the
  * piece's pixels of column c: a line down the wall there, unless one
- * stands within DETAIL pixels already. */
+ * stands near it already - within DETAIL pixels for a seam between a
+ * wall's cells (near[] innerNear), but for a face's own edge, where
+ * one wall ends and another shows, only the pixels beside it (near[]
+ * edgeNear): an edge is the shape of the place, a seam its detail. */
 /* The pixels within DETAIL - 1 of pixel i, i among them. */
-static const unsigned char nearPixels[8] = {0xF0, 0xF8, 0xFC, 0xFE, 0x7F, 0x3F, 0x1F, 0x0F};
+static const unsigned char innerNear[8] = {0xF0, 0xF8, 0xFC, 0xFE, 0x7F, 0x3F, 0x1F, 0x0F};
+/* The pixels within 1 of pixel i. */
+static const unsigned char edgeNear[8] = {0xC0, 0xE0, 0x70, 0x38, 0x1C, 0x0E, 0x07, 0x03};
 
-static void seam(int c, const struct piece *p, int x)
+static void seam(int c, const struct piece *p, int x, const unsigned char *near)
 {
 	int i;
 
 	if (x < 0 || x >= 2 * MIDDLE || (x >> 3) != c)
 		return;
 	i = x & 7;
-	if (!(p->mask & bitAt[i]) || (lines & nearPixels[i]))
+	if (!(p->mask & bitAt[i]) || (lines & near[i]))
 		return;
 	lines |= bitAt[i];
 	vline(i, top[i], bottom[i]);
 }
 
-/* Whether sector pixel column x shows a wall: a piece of its cell
- * column has it.  Past the range looked at, taken as shown. */
-static int walled(int x)
+/* A piece's face from pixel column *x0 to *x1, its edges, wherever
+ * nearer walls hide them. */
+static void faceEdges(const struct piece *p, int *x0, int *x1)
 {
-	int c = x >> 3;
+	const unsigned char *near;
+	int L = p->lateral;
 
-	if (x < 0 || x >= 2 * MIDDLE || c < rangeFirst || c > rangeLast)
+	if (p->kind == kPlane) {
+		if (p->mirror) {		/* on the right the run's near end is its right edge */
+			*x0 = edgeRight(p->through, L);
+			*x1 = edgeRight(p->from - 1, L);
+		} else {
+			*x0 = edgeLeft(p->from - 1, L);
+			*x1 = edgeLeft(p->through, L);
+		}
+		return;
+	}
+	near = edgeNow[p->through - 1];
+	if (p->j == 0) {
+		*x0 = MIDDLE - near[0];
+		*x1 = MIDDLE + near[0];
+	} else if (p->j > 0) {
+		*x0 = MIDDLE + near[p->j - 1];
+		*x1 = p->j < LATERALS ? MIDDLE + near[p->j] : 2 * MIDDLE;
+	} else {
+		*x0 = -p->j < LATERALS ? MIDDLE - near[-p->j] : 0;
+		*x1 = MIDDLE - near[-p->j - 1];
+	}
+}
+
+/* Whether a face begins at sector pixel column x - a piece shows
+ * there whose left edge x is, and draws it.  Past the sector, taken
+ * as so. */
+static int begins(int x)
+{
+	const struct piece *p;
+	int c = x >> 3, i, k, x0, x1;
+
+	if (x < 0 || x >= 2 * MIDDLE)
 		return 1;
-	return covered[IX(c)] & bitAt[x & 7];
+	if (c < rangeFirst || c > rangeLast)
+		return 0;
+	i = IX(c);
+	for (k = 0; k < count[i]; k++) {
+		p = &pieces[i][k];
+		if (p->mask & bitAt[x & 7]) {
+			faceEdges(p, &x0, &x1);
+			return x0 == x;
+		}
+	}
+	return 0;
 }
 
 /* A face's right edge, at pixel x1: a seam at the pixel before it,
- * the face's last, unless a wall goes on at x1 - whose own left edge
- * the seam is then, drawn once. */
+ * the face's last, unless a face begins at x1 - whose own left edge
+ * the seam is then, drawn once.  A face farther away that shows on
+ * past x1 has its edge hidden: the seam is this one's. */
 static void rightSeam(int c, const struct piece *p, int x1)
 {
-	if (!walled(x1))
-		seam(c, p, x1 - 1);
+	int x = x1 - 1;
+
+	if (x < 0 || (x >> 3) != c || !(p->mask & bitAt[x & 7]))	/* not in this column: begins() spared */
+		return;
+	if (!begins(x1))
+		seam(c, p, x, edgeNear);
 }
 
 /* A piece's wall into the column: the rows it stands over in each
@@ -422,7 +488,6 @@ static void rightSeam(int c, const struct piece *p, int x1)
 static void wall(int c, const struct piece *p)
 {
 	int i, half, n, x, x0, x1, lo, hi, L = p->lateral;
-	const unsigned char *near;
 
 	for (i = 0; i < 8; i++) {
 		if (!(p->mask & bitAt[i]))
@@ -440,6 +505,7 @@ static void wall(int c, const struct piece *p)
 		column[top[i]] |= bitAt[i];
 		column[bottom[i]] |= bitAt[i];
 	}
+	faceEdges(p, &x0, &x1);
 	if (p->kind == kPlane) {
 		/* The seams between the run's cells: the corners come nearer
 		 * the sector's middle row by row, so going from the column's
@@ -447,47 +513,32 @@ static void wall(int c, const struct piece *p)
 		 * first past it ends the loop. */
 		lo = c << 3;
 		hi = lo + 7;
-		if (p->mirror) {		/* on the right the run's near end is its right edge */
-			x0 = edgeRight(p->through, L);
-			x1 = edgeRight(p->from - 1, L);
+		if (p->mirror) {
 			for (n = p->through - 1; n >= p->from; n--) {
 				x = MIDDLE + edgeNow[n][L];
 				if (x > hi)
 					break;
 				if (x >= lo)
-					seam(c, p, x);
+					seam(c, p, x, innerNear);
 			}
 		} else {
-			x0 = edgeLeft(p->from - 1, L);
-			x1 = edgeLeft(p->through, L);
 			for (n = p->from; n < p->through; n++) {
 				x = MIDDLE - edgeNow[n][L];
 				if (x > hi)
 					break;
 				if (x >= lo)
-					seam(c, p, x);
+					seam(c, p, x, innerNear);
 			}
 		}
-	} else {
-		near = edgeNow[p->through - 1];
-		if (p->j == 0) {
-			x0 = MIDDLE - near[0];
-			x1 = MIDDLE + near[0];
-		} else if (p->j > 0) {
-			x0 = MIDDLE + near[p->j - 1];
-			x1 = p->j < LATERALS ? MIDDLE + near[p->j] : 2 * MIDDLE;
-		} else {
-			x0 = -p->j < LATERALS ? MIDDLE - near[-p->j] : 0;
-			x1 = MIDDLE - near[-p->j - 1];
-		}
 	}
-	seam(c, p, x0);
+	seam(c, p, x0, edgeNear);
 	rightSeam(c, p, x1);
 }
 
 /* The floor's edges across the axis in the column, and the ceiling's
  * upside down: the nearest first, each at least DETAIL rows from the
- * one before, in the pixels where no wall stands over the row. */
+ * one before, in the pixels where no wall stands over the row - nor
+ * stands on it: the edge right under a wall's foot is the foot. */
 static void crossEdges(int c)
 {
 	int n, r, i, last = VIEW_ROWS + DETAIL;
@@ -500,14 +551,14 @@ static void crossEdges(int c)
 		if (r > last - DETAIL)
 			continue;
 		last = r;
-		if (r <= minBottom)		/* under every pixel's wall: so are the rest, nearer the horizon */
+		if (r <= minBottom + 1)		/* under every pixel's wall: so are the rest, nearer the horizon */
 			break;
-		if (r > maxBottom) {
+		if (r > maxBottom + 1) {
 			bits = 0xFF;
 		} else {
 			bits = 0;
 			for (i = 0; i < 8; i++)
-				if (r > bottom[i])
+				if (r > bottom[i] + 1)
 					bits |= bitAt[i];
 		}
 		column[r] |= bits;
@@ -721,7 +772,7 @@ static void placePart(const struct part *p)
 	v.facing = p->facing;
 	place(&v);
 	rangeFirst = p->s0;
-	rangeLast = p->s1;
+	rangeLast = p->s1 < SECTOR_CELLS - 1 ? p->s1 + 1 : p->s1;	/* as visibility() looked */
 	rangeBase = p->base;
 }
 
@@ -740,7 +791,7 @@ void view_turn_pass(int pass)
 		part[i].base = k;
 		placePart(&part[i]);
 		visibility(part[i].s0, part[i].s1);
-		k += part[i].s1 - part[i].s0 + 1;
+		k += rangeLast - rangeFirst + 1;
 	}
 	ms_hscroll(VIEW_LEFT, VIEW_LEFT + VIEW_CELLS - 1, VIEW_TOP, VIEW_TOP + VIEW_ROWS - 1,
 		   turnDir > 0 ? -TURN_COLUMNS : TURN_COLUMNS);
