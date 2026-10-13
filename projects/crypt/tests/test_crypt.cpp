@@ -67,12 +67,12 @@ double angleOf(int x) { return (x + 40 + 0.5 - 128) * (kPi / 2) / 256; }
 
 /* Half the height of the left wall in view pixel column x, as the
  * tables have it: 120 sin|theta| rounded, theta the column's angle;
- * 0 where the ray meets the corridor's end first, 9.5 cells ahead at
- * the start. */
+ * 0 where the ray meets it past the four rows of cells looked at, 4.5
+ * cells ahead at the start - the dark there. */
 int wallHalf(int x)
 {
     const double theta = angleOf(x);
-    if (theta >= 0 || 0.5 / std::tan(-theta) > 9.5) return 0;
+    if (theta >= 0 || 0.5 / std::tan(-theta) > 4.5) return 0;
     const int half = static_cast<int>(std::nearbyint(120 * std::sin(-theta)));
     return half < 1 ? 1 : half;
 }
@@ -159,7 +159,8 @@ TEST_CASE("the left wall's top and foot run straight to the horizon, pixel by pi
     /* In every pixel column of the left wall its top edge is the pixel
      * at row 60 - half and its foot the pixel at 59 + half, and the
      * pixel between them on the horizon is clear - the wall is one
-     * colour, only its edges drawn. */
+     * colour, only its edges drawn; its last pixel before the dark is
+     * its end, a line. */
     int columns = 0;
     for (int x = 0; x < 80; ++x) {
         const int half = wallHalf(x);
@@ -167,7 +168,7 @@ TEST_CASE("the left wall's top and foot run straight to the horizon, pixel by pi
         CAPTURE(x); CAPTURE(half);
         CHECK(black(crawl, x, 60 - half));
         CHECK(black(crawl, x, 59 + half));
-        if (half > 2 && !seamAt(x)) CHECK_FALSE(black(crawl, x, 60));
+        if (half > 2 && !seamAt(x) && wallHalf(x + 1) != 0) CHECK_FALSE(black(crawl, x, 60));
         ++columns;
     }
     CHECK(columns > 60);
@@ -190,15 +191,14 @@ TEST_CASE("every seam is a line: the cells' corners down the wall, the floor's a
     for (int r = 40; r < 80; r += 5) { CAPTURE(r); CHECK_FALSE(black(crawl, 46, r)); }
     /* The floor's nearest edge across runs as a row through each
      * column, bowing a little from column to column as the cylinder
-     * has it, right up to the wall's foot and not into the wall - the
-     * row right under the foot is the foot's; the ceiling's is its
-     * mirror. */
+     * has it, right up to the wall's foot and not into the wall; the
+     * ceiling's is its mirror. */
     for (int c = 0; c < 11; ++c) {
         const int row = crossRow(c, 1);
         for (int x = c * 8; x < c * 8 + 8; ++x) {
             const int half = wallHalf(x);
             CAPTURE(x); CAPTURE(row);
-            if (half == 0 || 60 + half < row) {
+            if (half == 0 || 59 + half < row) {
                 CHECK(black(crawl, x, row));
                 CHECK(black(crawl, x, 119 - row));
             } else if (59 + half > row && !seamAt(x)) {
@@ -241,20 +241,20 @@ TEST_CASE("a step forward runs the seams along the walls and moves no edge") {
         before = std::move(now);
     }
     CHECK(changes >= kStepPasses - 1);                  /* shown in parts, not one jump */
-    CHECK(crawl.view() != still);                       /* a cell on: the end of the corridor nearer */
+    CHECK(crawl.view() == still);                       /* a cell on, the same four cells of corridor ahead */
     CHECK(crawl.cell(20, 168)[1] == 0x46);              /* the map: the party's arrow, yellow */
     CHECK(crawl.cell(20, 168)[0] != 0);
 }
 
-TEST_CASE("two steps on and two back leave the picture as it was") {
+TEST_CASE("six steps on and six back leave the picture as it was") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
     const auto start = crawl.view();
-    for (int i = 0; i < 2; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }
-    CHECK(crawl.view() != start);
-    crawl.png("twoOn");
-    for (int i = 0; i < 2; ++i) { crawl.tap(ms0515::Key::Down); settle(crawl); }
+    for (int i = 0; i < 6; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }
+    CHECK(crawl.view() != start);                       /* the corridor's end come within four cells */
+    crawl.png("sixOn");
+    for (int i = 0; i < 6; ++i) { crawl.tap(ms0515::Key::Down); settle(crawl); }
     crawl.png("twoBack");
     MESSAGE("back on the first cell, cells differing from the start: " << differences(start, crawl.view()));
     CHECK(crawl.view() == start);
@@ -312,35 +312,67 @@ TEST_CASE("up to the wall ahead: a frame, its corners where the side walls end, 
     CHECK(crawl.view() == at);
 }
 
-TEST_CASE("where a wall ends before one farther behind it, the corner is a line") {
+TEST_CASE("past four rows of cells ahead the view is dark") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
-    crawl.tap(ms0515::Key::Right);                      /* to face south, down the corridor of the west side */
-    settle(crawl);
-    crawl.png("south");
-    /* The wall on the left runs five cells and ends 5.5 cells ahead,
-     * its corner 15 pixel columns left of the middle: its last pixel,
-     * view pixel 72, a line down it.  Past it an opening, and behind
-     * the opening a cell's face 6.5 ahead, which goes on behind the
-     * wall's end; then the wall ahead from pixel 75, its own edge. */
-    const int half = wallHalf(72) - 1;
+    /* Down the corridor nothing stands within four cells: from the far
+     * edge of row 4's cells, 4.5 ahead, on the floor, to its mirror on
+     * the ceiling, the middle of the view is black - no line drawn in
+     * it, nothing past it looked at - and the floor beyond its foot is
+     * the floor. */
+    for (int c = 9; c < 13; ++c) {
+        const int half = crossRow(c, 4) - 60;
+        for (int x = c * 8; x < c * 8 + 8; x += 2) {
+            CAPTURE(x); CAPTURE(half);
+            for (int r = 60 - half; r < 60 + half; ++r) { CAPTURE(r); CHECK(black(crawl, x, r)); }
+            CHECK_FALSE(black(crawl, x, 60 + half + 1));
+            CHECK_FALSE(black(crawl, x, 59 - half - 1));
+        }
+    }
+}
+
+TEST_CASE("a corner with a farther one straight behind it, and the floor's lines up to the wall they meet") {
+    if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
+    Crawl crawl;
+    crawl.run(kWarmUp);
+    for (const ms0515::Key k : {ms0515::Key::Up, ms0515::Key::Up, ms0515::Key::Up, ms0515::Key::Up, ms0515::Key::Up,
+                                ms0515::Key::Up, ms0515::Key::Up, ms0515::Key::Up, ms0515::Key::Right, ms0515::Key::Up,
+                                ms0515::Key::Up, ms0515::Key::Up, ms0515::Key::Left}) {
+        crawl.tap(k);
+        settle(crawl);
+    }
+    crawl.png("cornerAhead");
+    /* At (9, 4) facing east the wall ahead is a cell's block two cells
+     * on, the corridor opening on its right.  Its near right corner,
+     * half a cell aside and a cell and a half ahead, falls in view
+     * pixel 140, and so does the far end of the wall a cell and a half
+     * aside four and a half ahead, straight behind: the block's edge
+     * is its own, a line down its last pixel the whole of its height,
+     * not the farther wall's short one. */
+    const int half = crossRow(17, 1) - 60;
     for (int r = 61 - half; r < 59 + half; ++r) {
         CAPTURE(r);
-        CHECK(black(crawl, 72, r));
+        CHECK(black(crawl, 139, r));
     }
-    for (int r = 54; r < 66; ++r) {
-        CAPTURE(r);
-        CHECK(black(crawl, 75, r));
-        CHECK_FALSE(black(crawl, 73, r));
-        CHECK_FALSE(black(crawl, 74, r));
-    }
+    /* Facing south, the corridor runs three cells to a wall, with an
+     * opening either side a cell before it; the floor's line half a
+     * cell to the left runs along the opening to the wall behind it,
+     * and meets its foot at row 76 by the corner at pixel 65: its last
+     * pixel 64, row 77; the ceiling's the same upside down. */
+    crawl.tap(ms0515::Key::Right);
+    settle(crawl);
+    crawl.png("openings");
+    CHECK(black(crawl, 64, 77));
+    CHECK(black(crawl, 64, 42));
+    CHECK(black(crawl, 65, 76));
 }
 
 TEST_CASE("a turn slides the picture four columns a pass; four of them come round to the start") {
     if (!built()) { MESSAGE("CRYPT.SAV not built - skipped"); return; }
     Crawl crawl;
     crawl.run(kWarmUp);
+    for (int i = 0; i < 2; ++i) { crawl.tap(ms0515::Key::Up); settle(crawl); }   /* a wall beside on the right, to turn to */
     const auto start = crawl.view();
     /* The frames of the turn, each kept when the screen stood still
      * over a frame (a pass painted, the next not begun): a pass's
