@@ -344,13 +344,15 @@ program needs of it:
   fills from the end by its own layout - `$INPTR`, `$FKPTR`, and
   before them `$TIMIT` on a monitor generated with time-outs (Mihin's
   OS-16SJ).  Flipping the bit alone makes the monitor overwrite the
-  handler's last code word; `tools/timit_handler.py` inserts the word
-  properly.  `ms0515-software/kits/HANDLERS.md` tells
+  handler's last code word; the software collection's
+  `tools/timit_handler.py` inserts the word properly.  `ms0515-software/kits/HANDLERS.md` tells
   the story.
 - The floppy handlers poll the controller; they use neither `.DRAST` nor
   `.FORK`.
 
 ## Tools of the trade
+
+The `tools/` scripts named here are the emulator repository's.
 
 - `tools/run_program.py`: boot a disk headless, type, keep the text and
   the screen PNG (the PNG is 640x400: two image rows per screen row).
