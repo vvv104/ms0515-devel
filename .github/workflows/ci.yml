@@ -137,10 +137,19 @@ jobs:
           cmake -S projects/stars -B projects/stars/build -G Ninja
           cmake --build projects/stars/build
 
+      # UBIX with the same compiler: its diskettes, and rt11test.dsk with the
+      # examples above and the collection's SABOT2 for /bin/rt11's tests.
+      - name: Build UBIX
+        if: matrix.cc == 'gcc-13'
+        run: |
+          export MS0515_GCC=~/pdp11-gcc
+          cmake -S projects/unix -B projects/unix/build -G Ninja
+          cmake --build projects/unix/build
+
       # The two SL suites boot the dec system of the collection with its
-      # SL.SYS files and type at it.  The GCC toolset's examples and STARS,
-      # built above on that job alone: the folder named makes a missing
-      # program a failure, not a skip.
+      # SL.SYS files and type at it.  The GCC toolset's examples, STARS and
+      # UBIX, built above on that job alone: the folder or image named makes
+      # a missing one a failure, not a skip.
       - name: Run tests
         shell: bash
         working-directory: build/Release
@@ -152,4 +161,5 @@ jobs:
           if [ "${{ matrix.cc }}" = "gcc-13" ]; then
             ./toolset/gcc/tests/gcc_tests --gcc-sav="${{ github.workspace }}/toolset/gcc/examples/build/sav"
             ./projects/stars/tests/stars_tests --stars-sav="${{ github.workspace }}/projects/stars/build/sav"
+            ./projects/unix/tests/unix_tests --unix-dsk="${{ github.workspace }}/projects/unix/build/unix.dsk"
           fi

@@ -329,8 +329,8 @@ makes a volume on it, `mount /dev/fd2 /tmp` puts it in the tree.
   line read by the library's own reader; RT-11 programs by rt11 - the GCC
   toolset's HELLO, ARITH and INPUT, and SABOT2 to its game - from
   `rt11test.dsk`, the system with /rt11 of what the build found (the
-  toolset's examples when they are built, SABOT2 when the recovery corpus
-  holds it), a .SAV not there refused; the kernel one file, no /boot/hi.
+  toolset's examples when they are built, SABOT2 when the software
+  collection is beside), a .SAV not there refused; the kernel one file, no /boot/hi.
   `bare.dsk`, the image without
   /etc/rc, is for the tests that mount by hand; the tests' images take
   /etc/rc without its `clear`, so that the boot's log stays on the screen
