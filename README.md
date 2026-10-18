@@ -36,6 +36,37 @@ environment variables (`toolset/ms0515.py`, `toolset/cmake/Ms0515.cmake`):
 | `MS0515_SOFTWARE` | the software collection | `../ms0515-software` |
 | `MS0515_GCC` | GCC for `pdp11-aout` (`toolset/gcc`) | on the `PATH` |
 
+## The toolsets
+
+Two ways to make a program for the machine, and nothing of either is kept
+here twice.
+
+**The machine's own tools**, run on the host one program at a time by the
+emulator's `ms0515-run` (`toolset/build.py` with a project's `build.toml`,
+or the CMake rules of `toolset/cmake/Rt11.cmake`).  The programs are the
+software collection's, from its `software/development`:
+
+| language | the tools | where they come from |
+|---|---|---|
+| MACRO-11 | `MACRO`, `LINK`, `LIBR`; `SYSMAC.SML`, `SYSLIB.OBJ`, `ODT.OBJ` | `LINK`, `LIBR` and the libraries are DEC's RT-11 V5.4, built from DEC's sources by `projects/rt11` and shipped to the collection; `MACRO` is the FODOS kit's, the one tool the V5.4 source kit has no source for |
+| Pascal | `PAS1`, `PASLIB.OBJ`, `PAS1.OBJ`, the graphics `PASGRF.OBJ` | OMSI Pascal-1 as adapted for the machine, from its diskettes (`pascal/`), over the kits' system library (`fodos/`) |
+| FORTRAN IV | `FORTRA`, `FORLIB.OBJ` | from the diskettes (`fortran/`), over the same system library |
+| BASIC | `BASICO` (БЕЙСИК-ОМЕГА), `BASIC` (BASIC/RAFOS) | from the diskettes (`basic/`); interpreters, run with the program beside them |
+| C | DECUS C: `CC`, `AS`, `CLIB.OBJ` | the SIG tape's sources (11SP59), rebuilt on the machine by `projects/decusc` and shipped to the collection (`decusc/`) |
+
+**GCC on the host**, a cross compiler for `pdp11-aout`: GNU binutils 2.44
+and GCC 15.2.0 from their released sources, C only, with one patch of
+ours to the pdp11 backend and libgcc built for the T-11 (`-m10`: no EIS,
+no FPP).  `toolset/gcc/build-toolchain.sh` builds it (on Windows, in WSL);
+the runtime, the C library and the `.SAV` maker (`aout2sav.py`) are ours,
+in `toolset/gcc/`, built by each project - see
+[`toolset/gcc/README.md`](toolset/gcc/README.md).  STARS and UBIX are
+made with it.
+
+**On the host besides:** Python 3.11 or newer (the scripts, the
+generators, `tomllib`), CMake 3.21+ and Ninja, Conan 2, and a C++20
+compiler for the programs' tests, which link the emulator's library.
+
 ## What is where
 
 | path | what |
