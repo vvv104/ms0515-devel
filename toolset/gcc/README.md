@@ -9,7 +9,7 @@ as `ms0515-disk` works - and only the finished `.SAV` runs on it, by
 `ms0515-run` or from a diskette.
 
 ```
-rt11_devel/toolset/gcc/
+toolset/gcc/
 ├── build-toolchain.sh   binutils + gcc for pdp11-aout from their sources, patched
 ├── gcc-pdp11-cmpsi.patch  the fix of the backend's comparison of longs
 ├── patch-gcc.py         what made the patch; remakes it for another GCC
@@ -34,7 +34,7 @@ rt11_devel/toolset/gcc/
 ## The compiler
 
 ```
-rt11_devel/toolset/gcc/build-toolchain.sh [<prefix>]      default ~/pdp11-gcc
+toolset/gcc/build-toolchain.sh [<prefix>]      default ~/pdp11-gcc
 ```
 
 downloads binutils 2.44 and GCC 15.2.0, builds them for `pdp11-aout` (C
@@ -52,7 +52,7 @@ Set `MS0515_GCC` to the prefix, or put `<prefix>/bin` on the PATH.
 
 ```cmake
 cmake_minimum_required(VERSION 3.21)
-include(<repository>/rt11_devel/toolset/cmake/Rt11Gcc.cmake)
+include(<repository>/toolset/cmake/Rt11Gcc.cmake)
 project(myprog LANGUAGES C ASM)
 
 rt11_c_library(NAME world SOURCES world.c sectors.c INCLUDE include)
@@ -202,7 +202,7 @@ and `-O1` come to 33 s.
 
 ## Tests
 
-`gcc_tests`, built with the emulator's tests (`rt11_devel/CMakeLists.txt`),
+`gcc_tests`, built by this repository's `CMakeLists.txt`,
 runs the examples' `.SAV`s from `examples/build/sav` - or
 `--gcc-sav=<folder>` - on ms0515-run's machine and checks what they
 print; without them it skips, unless the folder was named, when a
@@ -211,6 +211,6 @@ compiler on one Linux job, cached by the script and the patch, builds
 the examples and runs the suite that way.  Build the examples first:
 
 ```
-cmake -S rt11_devel/toolset/gcc/examples -B rt11_devel/toolset/gcc/examples/build -G Ninja
-cmake --build rt11_devel/toolset/gcc/examples/build
+cmake -S toolset/gcc/examples -B toolset/gcc/examples/build -G Ninja
+cmake --build toolset/gcc/examples/build
 ```

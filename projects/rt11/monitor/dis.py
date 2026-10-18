@@ -6,7 +6,10 @@ address, as in the RT11SJ link map).
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "toolset"))
+from ms0515 import emulator  # noqa: E402
+
+sys.path.insert(0, str(emulator() / "tools"))      # pdp11_disasm is the emulator's
 from pdp11_disasm import Disassembler  # noqa: E402
 
 

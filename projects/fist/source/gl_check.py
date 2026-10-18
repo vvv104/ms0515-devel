@@ -17,7 +17,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PROJ = HERE.parent
-DEFAULT_DUMP = (PROJ.parent.parent.parent / "src" / "build" / "Release" /
+sys.path.insert(0, str(PROJ.parents[1] / "toolset"))
+from ms0515 import emulator  # noqa: E402
+
+# What the harness left in the emulator's build tree.
+DEFAULT_DUMP = (emulator() / "src" / "build" / "Release" /
                 "lib" / "tests" / "fist_vram.bin")
 
 

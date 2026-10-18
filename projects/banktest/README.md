@@ -55,7 +55,7 @@ Active monitor dispatcher = `003177` (banks 0–6 primary; idle is `002177`).
 ## Build / run
 
 ```
-python rt11_devel/toolset/build.py rt11_devel/projects/banktest/build.toml
+python toolset/build.py projects/banktest/build.toml
 ```
 
 `bankproof.c` is a standalone host program linked against `src/core/src/memory.c`.

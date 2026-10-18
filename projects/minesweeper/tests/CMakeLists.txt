@@ -5,7 +5,7 @@
 # the game, not of the emulator, which is why they live here and not under
 # src/.
 #
-# The game is the project's build in rt11_devel/projects/minesweeper/build
+# The game is the project's build in projects/minesweeper/build
 # (see ../CMakeLists.txt); another folder is named on the command line:
 # mine_tests --mine-game=<folder>.  Everything skips itself when there is
 # none.  Without ms0515-run's machine (it needs the software collection)
@@ -25,7 +25,7 @@ add_executable(mine_tests
 )
 
 target_include_directories(mine_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/lib/src
+    ${ms0515_SOURCE_DIR}/lib/src
 )
 
 target_compile_definitions(mine_tests PRIVATE

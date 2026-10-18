@@ -12,10 +12,10 @@ set(CMAKE_SYSTEM_PROCESSOR pdp11)
 
 find_program(PDP11_GCC pdp11-aout-gcc
     HINTS "$ENV{MS0515_GCC}/bin" "${MS0515_GCC}/bin"
-    DOC "GCC for the target pdp11-aout (rt11_devel/toolset/gcc/build-toolchain.sh)")
+    DOC "GCC for the target pdp11-aout (toolset/gcc/build-toolchain.sh)")
 if(NOT PDP11_GCC)
     message(FATAL_ERROR "pdp11-aout-gcc is not found: build it with "
-                        "rt11_devel/toolset/gcc/build-toolchain.sh and set "
+                        "toolset/gcc/build-toolchain.sh and set "
                         "MS0515_GCC to its prefix, or put its bin on the PATH")
 endif()
 

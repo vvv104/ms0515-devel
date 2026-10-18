@@ -39,13 +39,13 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[4]
-sys.path.insert(0, str(ROOT / "rt11_devel" / "toolset"))
+sys.path.insert(0, str(HERE.parents[3] / "toolset"))
 sys.path.insert(0, str(HERE.parents[1] / "kit"))
 from emu_driver import EmulatorDriver  # noqa: E402
 import build_util as bu  # noqa: E402
+from ms0515 import package, software  # noqa: E402
 
-DISK = ROOT / "package" / "ms0515-disk.exe"
+DISK = package() / "ms0515-disk.exe"
 MARKED = {"0": "000024", "1": "000026", "12": "000052"}   # block(8) -> word
 
 
@@ -55,8 +55,7 @@ def disk(*args) -> str:
 
 
 def collection() -> Path:
-    base = os.environ.get("MS0515_SOFTWARE")
-    root = Path(base) if base else ROOT.parent / "ms0515-software"
+    root = software()
     if not (root / "disks.toml").is_file():
         raise SystemExit(f"no software collection in {root} (set MS0515_SOFTWARE)")
     return root

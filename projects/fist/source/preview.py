@@ -8,7 +8,7 @@ the VRAM exactly like the medium-res 320x200 video hardware does
 (low byte = 8 pixels D7..D0, high byte = F I G'R'B' G R B attributes,
 GRB palette with an intensity bit).
 
-    python rt11_devel/projects/fist/source/preview.py [out.png]
+    python projects/fist/source/preview.py [out.png]
 """
 import sys
 from pathlib import Path

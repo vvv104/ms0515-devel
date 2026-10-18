@@ -34,7 +34,6 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 TOOLSET = HERE.parent.parent.parent / "toolset"
-ROOT = TOOLSET.parent.parent
 sys.path.insert(0, str(TOOLSET))
 import decsys  # noqa: E402
 from emu_driver import EmulatorDriver  # noqa: E402

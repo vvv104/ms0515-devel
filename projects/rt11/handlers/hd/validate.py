@@ -5,8 +5,8 @@ HD.SYS dropped in) and a blank HD image on --hd, then:
   INSTALL HD ; LOAD HD ; INIT HD: ; COPY a file to HD: ; DIR HD:
 If the directory comes back with our file, the t2 device + driver work.
 
-Build HD.SYS first:  python rt11_devel/toolset/build.py \
-                            rt11_devel/projects/rt11/handlers/hd/build.toml
+Build HD.SYS first:  python toolset/build.py \
+                            projects/rt11/handlers/hd/build.toml
 """
 import shutil, sys, tempfile
 from pathlib import Path
@@ -15,13 +15,13 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 HERE = Path(__file__).resolve().parent
 TOOLSET = HERE.parents[3] / "toolset"
-ROOT = TOOLSET.parent.parent
 sys.path.insert(0, str(TOOLSET))
 from emu_driver import EmulatorDriver
 from rt11 import RT11Session, DOT_PROMPT
+from ms0515 import package
 
-CLI = ROOT / "package/ms0515-cli.exe"
-ROM = ROOT / "package/assets/rom/ms0515-romb.rom"   # the toolset system is the vvv104 Omega: ROM-B
+CLI = package() / "ms0515-cli.exe"
+ROM = package() / "assets/rom/ms0515-romb.rom"   # the toolset system is the vvv104 Omega: ROM-B
 SYSTEM_DIR = TOOLSET / "system"
 
 HD_BLOCKS = 20000                      # ~10 MB, well under the 65535 cap

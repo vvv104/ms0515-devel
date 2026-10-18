@@ -14,7 +14,7 @@ without memory protection, a file system with directories, a shell with
 pipelines, a set of utilities.
 
 - Target platforms: this emulator and the real machine.
-- Tools: GCC 15 for `pdp11-aout` with `-m10` from `rt11_devel/toolset/gcc`.
+- Tools: GCC 15 for `pdp11-aout` with `-m10` from `toolset/gcc`.
 - Out of scope: binary compatibility with V6/V7, memory protection, a
   multi-user system.
 
@@ -459,7 +459,7 @@ result.
 
 - **The toolchain** - the existing GCC 15 `pdp11-aout -m10`.  Own `crt0` and
   libc over the new system calls (based on the present libc of
-  `rt11_devel/toolset/gcc`), a linker script for the kernel and one for the
+  `toolset/gcc`), a linker script for the kernel and one for the
   ROM.
 - **`mkfs` and the diskette image builder** - after the model of
   `ms0515-disk`: make a volume, put files and directories in, write the kernel

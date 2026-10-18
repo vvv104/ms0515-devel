@@ -1,5 +1,5 @@
 # The system's own tests: the diskette image the project builds
-# (rt11_devel/projects/unix/build/unix.dsk) booted through ms0515_lib on the
+# (projects/unix/build/unix.dsk) booted through ms0515_lib on the
 # native ROM-B, the screen read as text.  Tests of the system, not of the
 # emulator; they skip themselves when the image is not built, and fail when
 # --unix-dsk=<file> names one that is missing.
@@ -46,10 +46,10 @@ add_executable(unix_tests
 
 # Machine.hpp reads the RAM disk's memory through the lib's internal access
 # to the board, as the FIST tests do.
-target_include_directories(unix_tests PRIVATE ${CMAKE_SOURCE_DIR}/lib/src)
+target_include_directories(unix_tests PRIVATE ${ms0515_SOURCE_DIR}/lib/src)
 
 target_compile_definitions(unix_tests PRIVATE
-    ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets"
+    ASSETS_DIR="${ms0515_SOURCE_DIR}/assets"
     UNIX_DSK="${CMAKE_CURRENT_SOURCE_DIR}/../build/unix.dsk"
     UNIX_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../root"
 )

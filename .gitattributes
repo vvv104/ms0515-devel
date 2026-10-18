@@ -1,0 +1,34 @@
+# Normalize line endings: LF in repo, native on checkout
+* text=auto
+
+# Force LF for source code (no CRLF even on Windows checkout)
+*.c     text eol=lf
+*.h     text eol=lf
+*.cpp   text eol=lf
+*.hpp   text eol=lf
+*.py    text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.cmake text eol=lf
+*.json  text eol=lf
+CMakeLists.txt text eol=lf
+*.sh    text eol=lf
+*.s     text eol=lf
+*.patch text eol=lf
+
+# Binary files
+*.rom   binary
+*.img   binary
+*.bmp   binary
+*.png   binary
+*.dsk   binary
+
+# The machine's Pascal sources: KOI-8 and CR LF, as PAS1 reads them
+*.PAS   -text
+projects/minesweeper/MINE.HLP binary
+projects/minesweeper/MINE.DAT binary
+
+# The files the UNIX diskette carries as they are: a Unix text ends its lines in LF
+projects/unix/root/** text eol=lf

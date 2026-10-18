@@ -4,7 +4,7 @@
 # for the compiler; MACHINE, HELD, PORTS, DRAW and STREAM for the machine
 # library; FILES for the files; DEEP for STACK; the CALC benchmark.
 #
-#     cmake -S rt11_devel/toolset/gcc/examples -B <build folder> -G Ninja
+#     cmake -S toolset/gcc/examples -B <build folder> -G Ninja
 #     cmake --build <build folder>
 #
 # The programs come out in <build folder>/sav; `ms0515-run HELLO` there

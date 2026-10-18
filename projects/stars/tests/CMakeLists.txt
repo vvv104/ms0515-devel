@@ -4,7 +4,7 @@
 # These are tests of the program, not of the emulator, which is why they
 # live here and not under src/.
 #
-# The program is the project's build in rt11_devel/projects/stars/build
+# The program is the project's build in projects/stars/build
 # (see ../CMakeLists.txt); another folder is named on the command line:
 # stars_tests --stars-sav=<folder>.  Everything skips itself when there is
 # none.  Without ms0515-run's machine (it needs the software collection)
@@ -24,7 +24,7 @@ add_executable(stars_tests
 )
 
 target_include_directories(stars_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/lib/src
+    ${ms0515_SOURCE_DIR}/lib/src
 )
 
 target_compile_definitions(stars_tests PRIVATE

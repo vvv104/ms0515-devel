@@ -19,14 +19,14 @@ add_executable(fist_tests
 )
 
 target_include_directories(fist_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/lib/src
+    ${ms0515_SOURCE_DIR}/lib/src
 )
 
 target_compile_definitions(fist_tests PRIVATE
-    ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets"
+    ASSETS_DIR="${ms0515_SOURCE_DIR}/assets"
     FIST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/.."
     FIST_SYSTEM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../toolset/system"
-    FIST_DSK="${CMAKE_SOURCE_DIR}/../package/assets/disks/fist_game.dsk"
+    FIST_DSK="${MS0515_PACKAGE}/assets/disks/fist_game.dsk"
     FIST_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}"
 )
 

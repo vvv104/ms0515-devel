@@ -26,7 +26,7 @@ add_executable(gcc_tests
 )
 
 target_include_directories(gcc_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/lib/src
+    ${ms0515_SOURCE_DIR}/lib/src
 )
 
 target_compile_definitions(gcc_tests PRIVATE

@@ -9,7 +9,7 @@
 #
 #     cmake_minimum_required(VERSION 3.20)
 #     project(myprog LANGUAGES NONE)
-#     include(<repository>/rt11_devel/toolset/cmake/Rt11.cmake)
+#     include(<repository>/toolset/cmake/Rt11.cmake)
 #
 #     rt11_tools(TOOLS MACRO.SAV LINK.SAV SYSMAC.SML SYSLIB.OBJ)
 #     rt11_stage(SOURCES MYPROG.MAC)
@@ -20,11 +20,11 @@
 # What it needs, each a cache variable that an environment variable of the
 # same name presets:
 #
-#   MS0515_RUN        ms0515-run; looked for in $MS0515_PACKAGE and in the
-#                     repository's package/ folder
+#   MS0515_RUN        ms0515-run; looked for in MS0515_PACKAGE, the
+#                     emulator's binaries (Ms0515.cmake beside this file)
 #   MS0515_SOFTWARE   the software collection (the tools come from its
-#                     software/development); ../ms0515-software beside the
-#                     repository when not said
+#                     software/development); Ms0515.cmake, ../ms0515-software
+#                     beside this repository when not said
 #
 # The work folder is ${RT11_WORK}, in the build tree.  A file a program
 # writes there has the name RT-11 gave it, in lower case: MACRO's object of
@@ -32,27 +32,16 @@
 
 include_guard(GLOBAL)
 
-get_filename_component(RT11_REPOSITORY "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+include("${CMAKE_CURRENT_LIST_DIR}/Ms0515.cmake")
 set(RT11_RUN_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/Rt11Run.cmake")
 set(RT11_PATCH_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/Rt11Patch.cmake")
 
 find_program(MS0515_RUN NAMES ms0515-run
-    HINTS "$ENV{MS0515_PACKAGE}" "${RT11_REPOSITORY}/package"
+    HINTS "${MS0515_PACKAGE}"
     DOC "ms0515-run, which runs one RT-11 program from its folder")
 if(NOT MS0515_RUN)
     message(FATAL_ERROR "ms0515-run is not found: build the emulator "
                         "(its package/ folder) or set MS0515_RUN")
-endif()
-
-if(NOT MS0515_SOFTWARE)
-    if(DEFINED ENV{MS0515_SOFTWARE})
-        file(TO_CMAKE_PATH "$ENV{MS0515_SOFTWARE}" _rt11_software)
-    else()
-        get_filename_component(_rt11_software
-            "${RT11_REPOSITORY}/../ms0515-software" ABSOLUTE)
-    endif()
-    set(MS0515_SOFTWARE "${_rt11_software}" CACHE PATH
-        "The software collection the machine's tools are taken from")
 endif()
 
 set(RT11_WORK "${CMAKE_CURRENT_BINARY_DIR}/work")

@@ -23,13 +23,13 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[3]
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(ROOT / "rt11_devel" / "toolset"))
+sys.path.insert(0, str(HERE.parents[2] / "toolset"))
 from emu_driver import EmulatorDriver  # noqa: E402
 import build_util as bu  # noqa: E402
+from ms0515 import package, software  # noqa: E402
 
-DISK = ROOT / "package" / "ms0515-disk.exe"
+DISK = package() / "ms0515-disk.exe"
 
 # An indirect file that uses what IND is for: a variable, a number, a test
 # and a branch.  If IND runs it at all, it says so in its own words.
@@ -51,8 +51,7 @@ def disk(*args) -> None:
 
 
 def collection() -> Path:
-    base = os.environ.get("MS0515_SOFTWARE")
-    root = Path(base) if base else ROOT.parent / "ms0515-software"
+    root = software()
     if not (root / "disks.toml").is_file():
         raise SystemExit(f"no software collection in {root} (set MS0515_SOFTWARE)")
     return root

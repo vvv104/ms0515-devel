@@ -13,7 +13,7 @@ or any other PDP-11 rewrites the second file and leaves the first alone.
 ## Files
 
 ```
-rt11_devel/projects/manicm/
+projects/manicm/
 ├── README.md        this file
 ├── MANICM.MAC       the game - every routine named for the original's address
 ├── MS0515.MAC       the machine: screen, keys, speaker, clock (see its top)
@@ -37,8 +37,8 @@ come from the original tape at build time, the way FIST's art does:
 ```
 git clone https://github.com/skoolkid/manicminer ../manicminer   # the disassembly
 pip install skoolkit
-python rt11_devel/projects/manicm/source/prepare_mm.py            # the snapshot (tap2sna.py)
-python rt11_devel/toolset/build.py rt11_devel/projects/manicm/build.toml
+python projects/manicm/source/prepare_mm.py            # the snapshot (tap2sna.py)
+python toolset/build.py projects/manicm/build.toml
 ```
 
 `gen_data.py` writes `MANICM.DAT`: a run of 512-byte blocks holding the

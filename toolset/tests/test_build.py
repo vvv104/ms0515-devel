@@ -304,7 +304,7 @@ class TestManifestErrors:
 
 class TestRepoManifests:
     """Pick up the manifests actually shipped under
-    rt11_devel/projects/<name>/build.toml and make sure they parse cleanly."""
+    projects/<name>/build.toml and make sure they parse cleanly."""
 
     def test_saper_manifest_parses(self):
         manifest = TOOLSET.parent / "projects" / "saper" / "build.toml"

@@ -6,7 +6,7 @@ for the Soviet MS-0515 personal computer running RT-11).
 ## Layout
 
 ```
-rt11_devel/projects/saper/
+projects/saper/
 ├── README.md          this file
 ├── build.toml         declarative build manifest (consumed by ../../toolset/build.py)
 ├── SAPER.MAC          generated MACRO-11 source (committed for reference)
@@ -28,11 +28,11 @@ experiments but `gen_saper.py` will overwrite the file on the next build.
 ## Building
 
 ```
-python rt11_devel/toolset/build.py rt11_devel/projects/saper/build.toml
+python toolset/build.py projects/saper/build.toml
 ```
 
 The manifest declares `language = "macro11"` plus a pre/post hook; the
-universal driver in `rt11_devel/toolset/build.py` does the rest:
+universal driver in `toolset/build.py` does the rest:
 
 1. Runs `source/gen_saper.py` (pre_build) → emits a fresh `SAPER.MAC`.
 2. Stages `SAPER.MAC` into a scratch work folder with the toolchain out of

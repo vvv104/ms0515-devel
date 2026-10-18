@@ -60,7 +60,7 @@ demo's two AI fighters changing pose every frame) runs below the pace.
 ## Layout
 
 ```
-rt11_devel/projects/fist/
+projects/fist/
 ├── README.md          this file
 ├── LAYOUT.md          the whole-game memory layout decision
 ├── build.toml         declarative build manifest (macro11)
@@ -97,8 +97,8 @@ skoolkit`; the tape is fetched from World of Spectrum by the checkout's own
 ```
 git clone https://github.com/pobtastic/wayoftheexplodingfist
 export WOTEF_DIR=$PWD/wayoftheexplodingfist          # (the default: a checkout of that name next to this repository)
-python rt11_devel/projects/fist/source/prepare_wotef.py
-FIST_MODE=gamelogic FIST_GL=gamebg python rt11_devel/toolset/build.py rt11_devel/projects/fist/build.toml
+python projects/fist/source/prepare_wotef.py
+FIST_MODE=gamelogic FIST_GL=gamebg python toolset/build.py projects/fist/build.toml
 ```
 
 The attract frame the state is taken from is whatever the simulator is at
@@ -212,9 +212,9 @@ and the HUD at 03377.
 
 ## Tests
 
-`tests/` is the port's own harness, a doctest binary built with the
-emulator's test build (`fist_tests`, under `src/build/<config>/rt11_devel/
-projects/fist/tests/`).  It boots the built game headlessly through
+`tests/` is the port's own harness, a doctest binary built by this
+repository's build (`fist_tests`, under `build/<config>/projects/fist/
+tests/`).  It boots the built game headlessly through
 `ms0515_lib` on a folder device (`FistGame.hpp`) and checks it from the
 outside - VRAM and the game state in the extended banks:
 
@@ -236,8 +236,8 @@ All paths default to the repo layout (`--fist-sav`, `--fist-dat`,
 skips itself when the game is not built:
 
 ```
-src/build/Release/rt11_devel/projects/fist/tests/fist_tests.exe
-src/build/Release/rt11_devel/projects/fist/tests/fist_tests.exe --fist-keylat -tc="*latency*"
+build/Release/projects/fist/tests/fist_tests.exe
+build/Release/projects/fist/tests/fist_tests.exe --fist-keylat -tc="*latency*"
 ```
 
 These are tests of the game, not of the emulator; the emulator's own suites

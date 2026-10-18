@@ -8,7 +8,7 @@ V5.04 on this hardware.
 ## Layout
 
 ```
-rt11_devel/toolset/
+toolset/
 ├── build.py         universal driver: read build.toml, run the recipe's
 │                    programs with ms0515-run, collect the outputs
 ├── decsys.py        a whole `dec` system composed from the software
@@ -31,7 +31,7 @@ rt11_devel/toolset/
                      C library, aout2sav.py, examples, tests - see gcc/README.md
 ```
 
-Projects that use this toolset live under `rt11_devel/projects/<name>/`
+Projects that use this toolset live under `projects/<name>/`
 and declare a `build.toml` (see "Declarative builds" below).
 
 **A build is the machine's own programs run one after another.**
@@ -145,7 +145,7 @@ Most projects don't need a custom Python script — they need a
 manifest.  Drop a `build.toml` next to the sources and run:
 
 ```
-python rt11_devel/toolset/build.py path/to/build.toml
+python toolset/build.py path/to/build.toml
 ```
 
 (or just `build.py` from inside the project directory).  The driver
@@ -201,7 +201,7 @@ runs:
 ```python
 import shutil, subprocess, sys, tempfile
 from pathlib import Path
-sys.path.insert(0, "rt11_devel/toolset")
+sys.path.insert(0, "toolset")
 import build, decsys
 
 work = Path(tempfile.mkdtemp())
@@ -221,7 +221,7 @@ A pipeline that needs a booted monitor is in "Builds that need a system".
 ## Running the tests
 
 ```
-python -m pytest rt11_devel/toolset/tests/ -v
+python -m pytest toolset/tests/ -v
 ```
 
 Tests don't boot the real emulator: each module is exercised against a

@@ -4,9 +4,9 @@
 # console (SL.diff), assembled behind the conditionals of the monitor it is
 # for and its own (SLCND.MAC) and linked the way DEC's SL.COM links it.  The
 # machine's MACRO and LINK do it, run from here with ms0515-run
-# (rt11_devel/toolset/cmake/Rt11.cmake).
+# (toolset/cmake/Rt11.cmake).
 #
-#     cmake -S rt11_devel/projects/rt11/handlers/sl -B <build folder>
+#     cmake -S projects/rt11/handlers/sl -B <build folder>
 #     cmake --build <build folder>
 #
 # DEC's sources are not in the repository: MS0515_RT11_SOURCES names the

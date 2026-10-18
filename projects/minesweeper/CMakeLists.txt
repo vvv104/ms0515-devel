@@ -2,9 +2,9 @@
 # 1995 for the MS 0515, built from his sources.
 #
 # OMSI Pascal (PAS1), MACRO and LINK of the machine build it, run from here
-# with ms0515-run (rt11_devel/toolset/cmake/Rt11.cmake):
+# with ms0515-run (toolset/cmake/Rt11.cmake):
 #
-#     cmake -S rt11_devel/projects/minesweeper -B <build folder> -G Ninja
+#     cmake -S projects/minesweeper -B <build folder> -G Ninja
 #     cmake --build <build folder>
 #
 # The game comes out in <build folder>/game: MINE.SAV and its help MINE.HLP.

@@ -1,14 +1,14 @@
 # Rt11Gcc.cmake - C programs for the MS 0515 as a CMake project.
 #
-# GCC built for pdp11-aout (rt11_devel/toolset/gcc/build-toolchain.sh)
+# GCC built for pdp11-aout (toolset/gcc/build-toolchain.sh)
 # compiles on the host, the machine takes no part in the build: a program
-# links with the runtime of rt11_devel/toolset/gcc (its start, the 16-bit
+# links with the runtime of toolset/gcc (its start, the 16-bit
 # arithmetic the processor lacks, RT-11's requests, the C library, the
 # machine - screen, clock, keyboard, joystick, speaker: ms0515.h) and
 # aout2sav.py wraps the a.out into a .SAV, which ms0515-run runs.
 #
 #     cmake_minimum_required(VERSION 3.21)
-#     include(<repository>/rt11_devel/toolset/cmake/Rt11Gcc.cmake)
+#     include(<repository>/toolset/cmake/Rt11Gcc.cmake)
 #     project(myprog LANGUAGES C ASM)
 #
 #     rt11_c_library(NAME world SOURCES world.c sectors.c INCLUDE include)

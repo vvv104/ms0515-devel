@@ -8,7 +8,7 @@ This proves the program installs the video mode, runs SPSCR, polls the
 keyboard and restores state cleanly.  Pixel-correctness of the 1:1 present
 is checked separately by the C++ VRAM oracle.
 
-    python rt11_devel/projects/fist/validate.py
+    python projects/fist/validate.py
 """
 import re
 import shutil
@@ -18,15 +18,16 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[2]
-sys.path.insert(0, str(ROOT / "rt11_devel/toolset"))
+TOOLSET = HERE.parents[1] / "toolset"
+sys.path.insert(0, str(TOOLSET))
 
 from emu_driver import EmulatorDriver          # noqa: E402
 from rt11 import RT11Session, DOT_PROMPT        # noqa: E402
+from ms0515 import package                      # noqa: E402
 
-CLI    = ROOT / "package/ms0515-cli.exe"
-ROM    = ROOT / "package/assets/rom/ms0515-romb.rom"   # the toolset system is the vvv104 Omega: ROM-B
-SYSTEM = ROOT / "rt11_devel/toolset/system"
+CLI    = package() / "ms0515-cli.exe"
+ROM    = package() / "assets/rom/ms0515-romb.rom"   # the toolset system is the vvv104 Omega: ROM-B
+SYSTEM = TOOLSET / "system"
 SAV    = HERE / "FIST.SAV"
 
 

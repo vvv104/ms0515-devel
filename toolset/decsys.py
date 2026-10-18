@@ -1,7 +1,7 @@
 """decsys.py - the build system of every builder here: a `dec` disk composed
 from the software collection, mounted as a folder.
 
-DEC's RT-11 V5.4 as built for the machine (rt11_devel/projects/rt11) is the
+DEC's RT-11 V5.4 as built for the machine (projects/rt11) is the
 system every build runs on - its monitor, its DZ/DV/HD handlers, DIR, PIP,
 DUP, and DEC's own LINK, LIBR, SYSLIB, SYSMAC and ODT.  Only MACRO is not
 DEC's: the V5.4 source kit has no source for it, and the collection's is
@@ -32,13 +32,16 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent.parent
-CLI = ROOT / "package" / "ms0515-cli.exe"
-DISKTOOL = ROOT / "package" / "ms0515-disk.exe"
+sys.path.insert(0, str(HERE))
+from ms0515 import package, software  # noqa: E402
+
+CLI = package() / "ms0515-cli.exe"
+DISKTOOL = package() / "ms0515-disk.exe"
 
 # What every build needs: the system's handlers for the drives it mounts,
 # the three utilities of a working disk, and DEC's tools with the MACRO.
@@ -73,8 +76,7 @@ def _lbn_offset(lbn: int) -> int:
 def collection() -> Path:
     """The software collection: $MS0515_SOFTWARE, else ../ms0515-software
     beside this repository."""
-    base = os.environ.get("MS0515_SOFTWARE")
-    root = Path(base) if base else ROOT.parent / "ms0515-software"
+    root = software()
     if not (root / "disks.toml").is_file():
         raise SystemExit(f"no software collection at {root} (set MS0515_SOFTWARE)")
     return root

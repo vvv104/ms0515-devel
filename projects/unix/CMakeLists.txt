@@ -1,10 +1,10 @@
 # UNIX for the MS 0515: the boot block, the kernel, the programs and the
 # diskette image.
 #
-#     cmake -S rt11_devel/projects/unix -B rt11_devel/projects/unix/build -G Ninja
-#     cmake --build rt11_devel/projects/unix/build
+#     cmake -S projects/unix -B projects/unix/build -G Ninja
+#     cmake --build projects/unix/build
 #
-# The compiler is GCC for pdp11-aout (rt11_devel/toolset/gcc), found under
+# The compiler is GCC for pdp11-aout (toolset/gcc), found under
 # $MS0515_GCC/bin or on the PATH.  Nothing here is an RT-11 program: the
 # boot block is linked at 070000, where it runs, and the kernel at 01000,
 # both put down flat; the programs are a.out files of the 0407 kind linked
@@ -278,7 +278,8 @@ foreach(name HELLO ARITH INPUT)
         list(APPEND RT11_DEPENDS "${GCC_SAV}/${name}.SAV")
     endif()
 endforeach()
-set(SABOT2 "${CMAKE_CURRENT_SOURCE_DIR}/../../../disk_recovery/work/corpus/export/data/src/extracted/System")
+include(../../toolset/cmake/Ms0515.cmake)
+set(SABOT2 "${MS0515_DIR}/disk_recovery/work/corpus/export/data/src/extracted/System")
 if(EXISTS "${SABOT2}/SABOT2.SAV" AND EXISTS "${SABOT2}/SABOT2.DAT")
     list(APPEND RT11_FILES /rt11/sabot2.sav=${SABOT2}/SABOT2.SAV /rt11/sabot2.dat=${SABOT2}/SABOT2.DAT)
     list(APPEND RT11_DEPENDS "${SABOT2}/SABOT2.SAV" "${SABOT2}/SABOT2.DAT")

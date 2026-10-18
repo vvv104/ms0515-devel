@@ -1,6 +1,6 @@
 / fd.s - /boot/fd, the diskettes' driver: the VG93 (a WD1793) driven by
 / itself, the way our RT-11 DZ handler drives it
-/ (rt11_devel/projects/rt11/handlers/dz/DZ.MAC), told again in the
+/ (projects/rt11/handlers/dz/DZ.MAC), told again in the
 / driver's shape.
 /
 / A driver is put down flat at 155000 (kernel.h DRV_BASE), 704 bytes at most,

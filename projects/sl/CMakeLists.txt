@@ -4,10 +4,10 @@
 # (its SL.diff and SLCND.MAC), with Tab given to a completion overlay of our
 # own: SLTAB.diff hooks it in, SLTAB.MAC is what stays in memory, SLOVL.MAC
 # the overlay.  The machine's MACRO and LINK build it, run from here with
-# ms0515-run (rt11_devel/toolset/cmake/Rt11.cmake).
+# ms0515-run (toolset/cmake/Rt11.cmake).
 #
-#     cmake -S rt11_devel/projects/sl -B rt11_devel/projects/sl/build -G Ninja
-#     cmake --build rt11_devel/projects/sl/build
+#     cmake -S projects/sl -B projects/sl/build -G Ninja
+#     cmake --build projects/sl/build
 #
 # DEC's sources are not in the repository: MS0515_RT11_SOURCES names the
 # rt11-v5.4 folder.  SL.SYS comes out in <build folder>/work/sl.sys.

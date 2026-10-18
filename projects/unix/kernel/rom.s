@@ -7,7 +7,7 @@
 / out of the VRAM window's way: ROM-B opens the window over
 / 040000..077777 on the stack it is entered with, and its character out is
 / not to be entered again from an interrupt in the middle of a character
-/ (the DEC monitor's lesson, rt11_devel/projects/rt11/monitor/OMCONS.MAC).
+/ (the DEC monitor's lesson, projects/rt11/monitor/OMCONS.MAC).
 
 	.text
 	.globl	_rom_putc, _rom_getc, _rom_blink, _rom_rw

@@ -8,20 +8,15 @@
 # The SL under test is the collection's (kits/dec/handlers/SL.SYS); a fresh
 # build is named on the command line: sl_tests --sl-sys=<build>/work/sl.sys.
 # Everything skips itself when there is none.  Without the collection
-# ($MS0515_SOFTWARE_DIR, else the checkout beside this repository) there is
+# ($MS0515_SOFTWARE, else the checkout beside this repository) there is
 # no system to boot and the harness is left out.
 # ─────────────────────────────────────────────────────────────────────────────
 
-if(DEFINED ENV{MS0515_SOFTWARE_DIR})
-    file(TO_CMAKE_PATH "$ENV{MS0515_SOFTWARE_DIR}" SL_SOFTWARE_DIR)
-else()
-    get_filename_component(SL_SOFTWARE_DIR
-        "${CMAKE_SOURCE_DIR}/../../ms0515-software" ABSOLUTE)
-endif()
+set(SL_SOFTWARE_DIR "${MS0515_SOFTWARE}")     # toolset/cmake/Ms0515.cmake
 
 if(NOT EXISTS "${SL_SOFTWARE_DIR}/kits/dec/bundles.toml" OR NOT TARGET ms0515-disk)
     message(STATUS "sl_tests: no dec kit at ${SL_SOFTWARE_DIR} "
-                   "(set MS0515_SOFTWARE_DIR) - not built")
+                   "(set MS0515_SOFTWARE) - not built")
     return()
 endif()
 
@@ -56,7 +51,7 @@ add_executable(sl_tests
 add_dependencies(sl_tests sl_tests_system)
 
 target_compile_definitions(sl_tests PRIVATE
-    ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets"
+    ASSETS_DIR="${ms0515_SOURCE_DIR}/assets"
     SL_SYSTEM_DISK="${SL_SYSTEM_DISK}"
     SL_SYS="${SL_SOFTWARE_DIR}/kits/dec/handlers/SL.SYS"
 )

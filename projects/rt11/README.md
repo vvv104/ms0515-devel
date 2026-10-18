@@ -22,7 +22,7 @@ folder (else it is `sources/rt11-v5.4` of the software collection,
 the machine changes in a file of DEC's is kept as a patch over it, never
 as a copy.  The machine every builder runs on is the collection's `dec`
 disk - DEC's RT-11 built here, its LINK, LIBR, SYSLIB, SYSMAC, ODT and
-the FODOS kit's MACRO - composed by `rt11_devel/toolset/decsys.py`; the
+the FODOS kit's MACRO - composed by `toolset/decsys.py`; the
 tools are kept once, in the collection, and a build stands on what it
 ships.
 

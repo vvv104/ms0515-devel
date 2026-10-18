@@ -6,5 +6,5 @@ snapshot, a mid-attract frame of it)."""
 import os
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 WOTEF_DIR = Path(os.environ.get("WOTEF_DIR") or (REPO_ROOT.parent / "wayoftheexplodingfist"))

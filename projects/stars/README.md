@@ -3,7 +3,7 @@
 A flight through a starfield, seen from the cockpit: the screen black,
 white stars born near the centre and sliding outward as the ship flies
 past them, the nearer the faster.  The first program written for the
-machine in C with GCC (`rt11_devel/toolset/gcc`), and C alone.
+machine in C with GCC (`toolset/gcc`), and C alone.
 
 | key | the ship |
 |---|---|
@@ -16,9 +16,9 @@ machine in C with GCC (`rt11_devel/toolset/gcc`), and C alone.
 ## Building and flying
 
 ```
-cmake -S rt11_devel/projects/stars -B rt11_devel/projects/stars/build -G Ninja
-cmake --build rt11_devel/projects/stars/build
-cd rt11_devel/projects/stars/build/sav && ms0515-run STARS
+cmake -S projects/stars -B projects/stars/build -G Ninja
+cmake --build projects/stars/build
+cd projects/stars/build/sav && ms0515-run STARS
 ```
 
 The compiler is `$MS0515_GCC/bin/pdp11-aout-gcc`, or on the PATH; on

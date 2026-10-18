@@ -1,0 +1,14 @@
+# What this repository stands on: repositories of their own, each kept in a
+# folder beside this one (tools/deps.py fetches a missing one) or wherever
+# its environment variable says.  `ref` is what this repository was last
+# seen working with - a branch, a tag or a commit.
+
+[ms0515]
+url = "https://github.com/vvv104/ms0515.git"
+ref = "7016a78ea9887d30e98a6ab7c78a56e8079ebda1"
+env = "MS0515_DIR"
+
+[ms0515-software]
+url = "https://github.com/vvv104/ms0515-software.git"
+ref = "c9a10867c4c92923e1737cd88f7c4441cd00fb71"
+env = "MS0515_SOFTWARE"

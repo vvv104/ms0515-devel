@@ -86,9 +86,9 @@ write over the kernel.
 ## Building and booting
 
 ```
-cmake -S rt11_devel/projects/unix -B rt11_devel/projects/unix/build -G Ninja
-cmake --build rt11_devel/projects/unix/build
-ms0515 --rom src/assets/rom/ms0515-romb.rom --disk0 rt11_devel/projects/unix/build/unix.dsk
+cmake -S projects/unix -B projects/unix/build -G Ninja
+cmake --build projects/unix/build
+ms0515 --rom ../ms0515/src/assets/rom/ms0515-romb.rom --disk0 projects/unix/build/unix.dsk
 ```
 
 The kernel turns the screen black at its start - register C's border

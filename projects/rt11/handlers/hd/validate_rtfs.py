@@ -15,13 +15,13 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 HERE = Path(__file__).resolve().parent
 TOOLSET = HERE.parents[3] / "toolset"
-ROOT = TOOLSET.parent.parent
 sys.path.insert(0, str(TOOLSET))
 from emu_driver import EmulatorDriver
 from rt11 import RT11Session
+from ms0515 import package
 
-CLI = ROOT / "package/ms0515-cli.exe"
-ROM = ROOT / "package/assets/rom/ms0515-romb.rom"   # the toolset system is the vvv104 Omega: ROM-B
+CLI = package() / "ms0515-cli.exe"
+ROM = package() / "assets/rom/ms0515-romb.rom"   # the toolset system is the vvv104 Omega: ROM-B
 SYSTEM_DIR = TOOLSET / "system"
 
 if not (HERE / "HD.SYS").exists():

@@ -1,0 +1,62 @@
+# Build output
+build/
+out/
+cmake-build-*/
+*.obj
+*.o
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+# RT-11 toolchain libraries (PDP-11 object modules, not MSVC build output)
+!toolset/build_tools/*.OBJ
+!projects/rt11/tools/*.OBJ
+
+# Conan
+CMakeUserPresets.json
+
+# Python
+__pycache__/
+
+# Editor / IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Claude Code local settings
+.claude/
+
+# RT-11 build outputs - regenerate with:
+#   python toolset/build.py projects/<name>/build.toml
+projects/rt11/handlers/hd/HD.SYS
+projects/saper/SAPER.SAV
+projects/saper/SAPER.MAC
+projects/saper/SAPER.DAT
+projects/saper/SAPER.HLP
+
+# FIST artifacts embed the original game's (copyrighted) art - never commit;
+# regenerate from the external tape (WOTEF_DIR) via the build above.
+projects/fist/*.MAC
+# FLOAD.MAC is the exception: a hand-written loader with none of the
+# original in it, and the build needs it as a source.
+!projects/fist/FLOAD.MAC
+projects/fist/FIST.SAV
+projects/fist/FIST.DAT
+# MANICM: the data file is the original's, the image is built
+projects/manicm/MANICM.DAT
+projects/manicm/MANICM.SAV
+projects/manicm/MANICM.MAP
+projects/fist/FLOAD.SAV
+projects/fist/*.MAP
+projects/fist/*.png
+projects/fist/*.bin
+projects/fist/*.json
+projects/banktest/*.SAV
+projects/banktest/*.MAP

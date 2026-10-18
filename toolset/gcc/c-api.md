@@ -1,13 +1,13 @@
 # The C API of the MS 0515
 
 What a C program on the machine is made of: the headers of
-`rt11_devel/toolset/gcc/include`, their functions, and the rules they
+`toolset/gcc/include`, their functions, and the rules they
 keep.  `docs/programming.md` is the handbook of the machine itself - the
 processor, RT-11's memory, the dispatcher, the interrupts - and every
 function here says which part of it it stands on.  How to build the
-compiler and a project is `rt11_devel/toolset/gcc/README.md`; the
+compiler and a project is `toolset/gcc/README.md`; the
 examples under `examples/` there use everything below, and
-`rt11_devel/projects/stars` is a whole program on it.
+`projects/stars` is a whole program on it.
 
 ## The program
 
@@ -23,7 +23,7 @@ the monitor by `.SETTOP`.
 
 ```cmake
 cmake_minimum_required(VERSION 3.21)
-include(<repository>/rt11_devel/toolset/cmake/Rt11Gcc.cmake)
+include(<repository>/toolset/cmake/Rt11Gcc.cmake)
 project(myprog LANGUAGES C ASM)
 rt11_c_library(NAME world SOURCES world.c sectors.c INCLUDE include)
 rt11_c_program(NAME MYPROG SOURCES myprog.c [helpers.s] LIBRARIES world [STACK 2048])

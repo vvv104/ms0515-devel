@@ -2,7 +2,8 @@
 
 What a program running on this machine has to know, collected from the
 ports (FIST, MANICM), the disk work and the traces that found each fact.
-The hardware documents in `hardware/` describe the registers; this one
+The emulator's hardware documents (`docs/hardware/` in
+<https://github.com/vvv104/ms0515>) describe the registers; this one
 says what happens when a program uses them under RT-11, and what the
 emulator's core does about it.  Everything here was verified in the
 emulator against the original software or the machine's own documents; a
@@ -10,9 +11,9 @@ figure with no source named comes from the core's own model
 (`src/core/`), which is the reference for the machine as far as this
 project can check it.
 
-`rt11_devel/toolset/GOTCHAS.md` covers the build pipeline (MACRO, LINK,
+`toolset/GOTCHAS.md` covers the build pipeline (MACRO, LINK,
 the staging of files); this covers the program.  A program in C has the
-machine as a library: `rt11_devel/toolset/gcc/c-api.md` is its
+machine as a library: `toolset/gcc/c-api.md` is its
 reference, and each of its functions names the section here it stands on.
 
 ## The processor
@@ -42,7 +43,7 @@ reference, and each of its functions names the section here it stands on.
   test's `time_of()` prints the figure - rather than estimate.
 - **Spectrum conversions**: one Z80 T-state at 3.5 MHz = 2.1429 clocks;
   a `DJNZ` turn (13 T) = 1.55 turns of `SOB Rn,.`; N turns for T
-  T-states is `T * 0.119`.  `rt11_devel/projects/fist/source/timing.py`
+  T-states is `T * 0.119`.  `projects/fist/source/timing.py`
   has the arithmetic; MANICM's `MS0515.MAC` has worked examples (the
   beeper loops).
 
@@ -81,7 +82,7 @@ reference, and each of its functions names the section here it stands on.
 The kits' monitors (ОМЕГА, ОСА and those made from them) are SYSGENs of
 DEC's RT-11 V5.4 sources with the machine's own code added; their
 additions, rebuilt as modules over DEC's sources (both ОМЕГА builds and
-ОСА, byte for byte), are in `rt11_devel/projects/rt11/monitor/`.  What a program
+ОСА, byte for byte), are in `projects/rt11/monitor/`.  What a program
 meets of them - the same in both kits where not said otherwise:
 
 - **The console is the ROM's.**  RT-11's console registers (`TTKS`...,
@@ -164,7 +165,7 @@ meets of them - the same in both kits where not said otherwise:
 
 ## The dispatcher, the VRAM window, the interrupts
 
-The dispatcher is the register at 177400 (`hardware/memory.md`).  What a
+The dispatcher is the register at 177400 (the emulator's `docs/hardware/memory.md`).  What a
 program needs of it:
 
 | value | meaning |
@@ -180,7 +181,7 @@ program needs of it:
   vectors are visible** - our own handlers in low memory are; RT-11's
   clock service behind the window is not (FIST masked everything at
   priority 7 for that reason).  A VRAM row is 40 words = 80 bytes, 200
-  rows; a word is the attribute over the pixels (`hardware/video.md`).
+  rows; a word is the attribute over the pixels (the emulator's `docs/hardware/video.md`).
   **The ROM opens the window itself, at 040000, on your stack**: ROM-B's
   character out (160000), key in (160004) and cursor blink (160014) put
   the window over 040000..077777 and call their own routines on the
@@ -188,7 +189,7 @@ program needs of it:
   loses the pushed return addresses to the video memory.  Keep the stack
   under 040000 (LINK's default is under 1000), or call the ROM on one
   that is - the `dec` monitor does the latter for its terminal
-  interrupts and the blink (`rt11_devel/projects/rt11/monitor/OMBLNK.MAC`).
+  interrupts and the blink (`projects/rt11/monitor/OMBLNK.MAC`).
 - **Do not mask interrupts across a long section** if you count them: an
   interrupt that arrives while masked merges with the next of its kind
   (the core keeps one pending flag), and a 35 ms copy with the frame
@@ -222,13 +223,13 @@ program needs of it:
   else the timer's - so a waiting keyboard request at priority 5 hides a
   timer request as well.  The processor reads the requests in its bus
   read cycles: one set by an instruction is taken after the next one.
-  (`docs/kb/KNOWN_ISSUES.md`, the interrupt entry.)
+  (the emulator's `docs/kb/KNOWN_ISSUES.md`, the interrupt entry.)
 
 ## The keyboard
 
 - The MS7004 talks through the i8251 USART at 177440 (data) / 177442
   (status, bit 1 = a byte waiting), 4800 baud - one byte per 2 ms
-  (`hardware/keyboard.md`).  Its interrupt is vector 130.  **The ROM's
+  (the emulator's `docs/hardware/keyboard.md`).  Its interrupt is vector 130.  **The ROM's
   handler on that vector takes the byte the moment it arrives** and hands
   it to RT-11; a program that polls 177440 sees nothing.  Two ways out:
   run at priority 7 with the keyboard polled (FIST, which also keeps its
@@ -332,7 +333,7 @@ program needs of it:
   A test harness that reads a program's state by name gets the addresses
   from there (MANICM's tests).
 - The rest - ASCII only, `SYSMAC.SML` on SY:, `STARTS.COM`, LINK's
-  switches, `--no-config` - is in `rt11_devel/toolset/GOTCHAS.md`.
+  switches, `--no-config` - is in `toolset/GOTCHAS.md`.
 
 ## RT-11 handlers
 

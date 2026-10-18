@@ -16,11 +16,11 @@ add_executable(manicm_tests
 )
 
 target_include_directories(manicm_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/lib/src
+    ${ms0515_SOURCE_DIR}/lib/src
 )
 
 target_compile_definitions(manicm_tests PRIVATE
-    ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets"
+    ASSETS_DIR="${ms0515_SOURCE_DIR}/assets"
     MANICM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/.."
     MANICM_SYSTEM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../toolset/system"
 )
