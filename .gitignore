@@ -58,5 +58,3 @@ projects/fist/*.MAP
 projects/fist/*.png
 projects/fist/*.bin
 projects/fist/*.json
-projects/banktest/*.SAV
-projects/banktest/*.MAP

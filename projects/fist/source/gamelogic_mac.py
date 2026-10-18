@@ -2370,7 +2370,8 @@ def main_loader():
     signals success by a clean .EXIT (a mismatch spins forever - a visible hang).
     This validates the embed -> load -> park -> relocate pipeline end to end; the
     renderer is layered on top in the next stage.  Park-RMON itself is proven in
-    projects/banktest/ (BFLIP)."""
+    BFLIP, an experiment since removed (its findings: docs/programming.md,
+    "Memory and the monitor")."""
     import setup_ref as sr
     snap, b_in, c_in, pose = sr.capture_c34f_low(0xD400)
     gst = snap[GBASE:GST_FULL_END]
@@ -2382,7 +2383,7 @@ def main_loader():
     src = f"""        .TITLE  FISTLDR
 ;
 ; park-RMON full-GST loader (verify stage) - generated, do not edit by hand.
-; Memory map under live RT-11 SJ V5.04 (see projects/banktest):
+; Memory map under live RT-11 SJ V5.04 (measured; docs/programming.md):
 ;   banks 0-3  001000-077777  user area (our code + the GST embed)  PRIMARY
 ;   banks 4-5  100000-137777  RT-11 USR   - parked to extended, become the
 ;   bank  6    140000-157777  RMON        - GST 24 KB runtime home
