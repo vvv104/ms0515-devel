@@ -32,7 +32,10 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "toolset"))
+from ms0515 import emulator  # noqa: E402
+
+sys.path.insert(0, str(emulator() / "tools"))      # pdp11_disasm is the emulator's
 from pdp11_disasm import Disassembler  # noqa: E402
 
 R50 = " ABCDEFGHIJKLMNOPQRSTUVWXYZ$.?0123456789"
