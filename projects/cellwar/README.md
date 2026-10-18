@@ -124,6 +124,11 @@ is 16 rows of two words and a glyph 8 words down a column.  The window at
 interrupts are served below it.  The dispatcher reads back, and the game
 restores it as found rather than assuming a value: started by STARTS.COM
 on the toolset's folder device it found 003177, the frame interrupt on.
+Open: this is how the emulator answers, and it is not settled for the
+machine - `docs/programming.md` (2026-09-18, after this was written)
+has the dispatcher write-only, the ROM keeping its copy at 157700 for
+the monitor to change and write out; the game should take that copy
+before it ships.
 The keyboard sends no key-up codes; the game needs none, a key is a
 press.
 
