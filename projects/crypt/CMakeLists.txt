@@ -6,7 +6,7 @@
 #
 # The program comes out as <build folder>/sav/CRYPT.SAV; `ms0515-run CRYPT`
 # there plays it.  The art is PNGs under art/, turned into C by
-# tools/mkart.py at build time (the stand-ins are drawn by
+# the toolset's mkart.py at build time (the stand-ins are drawn by
 # art/placeholders.py); the view's geometry is tables made by
 # art/geometry.py.  The compiler: $MS0515_GCC/bin/pdp11-aout-gcc, or on
 # the PATH (rt11_devel/toolset/gcc/README.md).
@@ -16,8 +16,7 @@ include(../../toolset/cmake/Rt11Gcc.cmake)
 project(crypt LANGUAGES C ASM)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-set(TOOLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../tools")
-set(MKART "${TOOLS_DIR}/mkart.py")
+set(MKART "${CMAKE_CURRENT_SOURCE_DIR}/../../toolset/gcc/mkart.py")
 set(ART_DIR "${CMAKE_CURRENT_BINARY_DIR}/art")
 file(MAKE_DIRECTORY "${ART_DIR}")
 

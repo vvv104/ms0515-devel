@@ -128,14 +128,14 @@ def main():
                 texels += [patterns[y][c], attributes[y][c]]
         text = (f"/* {args.name}: {args.png.name} as a texture of {cells} columns by {height} rows,\n"
                 f" * a texel a word - the pattern, then the attribute - column by column;\n"
-                f" * made by tools/mkart.py - not for editing. */\n\n#include <tex.h>\n\n"
+                f" * made by mkart.py - not for editing. */\n\n#include <tex.h>\n\n"
                 f"static const unsigned char {args.name}_texels[{cells * height * 2}] = {{\n{rows(texels)}\n}};\n\n"
                 f"const struct tex {args.name} = {{{cells}, {height}, {args.name}_texels}};\n")
     else:
         px = [patterns[y][c] for y in range(height) for c in range(cells)]
         at = [attributes[y][c] for y in range(height) for c in range(cells)]
         text = (f"/* {args.name}: {args.png.name} as an image of {cells} cells by {height} rows,\n"
-                f" * made by tools/mkart.py - not for editing. */\n\n#include <ms0515.h>\n\n"
+                f" * made by mkart.py - not for editing. */\n\n#include <ms0515.h>\n\n"
                 f"static const unsigned char {args.name}_pixels[{cells * height}] = {{\n{rows(px)}\n}};\n\n"
                 f"static const unsigned char {args.name}_attributes[{cells * height}] = {{\n{rows(at)}\n}};\n\n"
                 f"const struct ms_image {args.name} = {{{cells}, {height}, {args.name}_pixels, {args.name}_attributes}};\n")

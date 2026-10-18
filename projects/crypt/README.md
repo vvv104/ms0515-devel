@@ -109,7 +109,7 @@ view, with the map of the cells about the party, the party's arrow in
 the middle and the level sliding under it; `src/main.c` the loop: a
 step in five passes of four frames, a turn in eight of two.
 
-The faces are PNGs under `art/`, turned into C by `tools/mkart.py` at
+The faces are PNGs under `art/`, turned into C by `rt11_devel/toolset/gcc/mkart.py` at
 build time; what is there now is drawn by `art/placeholders.py` and
 stands in until real pictures come.
 

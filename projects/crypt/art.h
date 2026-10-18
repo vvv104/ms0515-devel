@@ -1,5 +1,5 @@
 /* art.h - the pictures of CRYPT, each a PNG under art/ turned into C by
- * tools/mkart.py at build time (CMakeLists.txt).  The ones here are the
+ * rt11_devel/toolset/gcc/mkart.py at build time (CMakeLists.txt).  The ones here are the
  * stand-ins of art/placeholders.py until real ones come.  The walls
  * are not pictures: view.c draws them from art/geometry.py's tables. */
 

@@ -1,6 +1,6 @@
 """placeholders.py - the stand-in art of CRYPT, drawn by code: a
 skeleton, four faces drawn pixel by pixel.  Nothing here is meant to last; a PNG of the same
-size dropped in its place goes through tools/mkart.py the same way.
+size dropped in its place goes through rt11_devel/toolset/gcc/mkart.py the same way.
 Run it here: it writes the PNGs beside itself.  The walls are not
 pictures: view.c draws them from geometry.py's tables."""
 from pathlib import Path
