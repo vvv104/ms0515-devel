@@ -4,8 +4,8 @@
  * RT-11's RMON is, loads the .SAV under it and serves its EMTs - the
  * console, .SETTOP, the files of the .SAV's own directory read, .EXIT a
  * reset.  The image is rt11test.dsk: the system with /rt11 holding the GCC
- * toolset's examples when they are built, and SABOT2 when the recovery
- * corpus has it; what is not there is skipped.
+ * toolset's examples when they are built, and SABOT2 when the software
+ * collection is beside; what is not there is skipped.
  */
 #include "Machine.hpp"
 #include "Volume.hpp"

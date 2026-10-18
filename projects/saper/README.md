@@ -104,5 +104,6 @@ Address (octal)   Contents
 ## Credits
 
 Inspired by Pascal SAPER by Voronkov V.V. (1995), recovered from the
-VVV floppy archive in `disk_recovery/`.  MACRO-11 rewrite + host-side
+VVV floppies (the software collection's recovery, ms0515-software
+`recovery/`).  MACRO-11 rewrite + host-side
 build glue: this project.

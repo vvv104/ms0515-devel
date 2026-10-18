@@ -265,8 +265,8 @@ add_custom_command(OUTPUT unix.dsk
     COMMENT "unix.dsk")
 # rt11test.dsk: the system with /rt11 of RT-11 programs, for the tests of
 # /bin/rt11 alone - the GCC toolset's examples when they are built
-# (toolset/gcc/examples/build/sav), SABOT2 when the recovery corpus holds
-# it.  Looked for when the project is configured; neither goes into the
+# (toolset/gcc/examples/build/sav), SABOT2 when the software collection is
+# beside ($MS0515_SOFTWARE).  Looked for when the project is configured; neither goes into the
 # system's images.
 set(RT11_FILES)
 set(RT11_DEPENDS)
@@ -279,7 +279,7 @@ foreach(name HELLO ARITH INPUT)
     endif()
 endforeach()
 include(../../toolset/cmake/Ms0515.cmake)
-set(SABOT2 "${MS0515_DIR}/disk_recovery/work/corpus/export/data/src/extracted/System")
+set(SABOT2 "${MS0515_SOFTWARE}/software/games/sabot2/osa")   # the ОСА build, as the collection ships it
 if(EXISTS "${SABOT2}/SABOT2.SAV" AND EXISTS "${SABOT2}/SABOT2.DAT")
     list(APPEND RT11_FILES /rt11/sabot2.sav=${SABOT2}/SABOT2.SAV /rt11/sabot2.dat=${SABOT2}/SABOT2.DAT)
     list(APPEND RT11_DEPENDS "${SABOT2}/SABOT2.SAV" "${SABOT2}/SABOT2.DAT")

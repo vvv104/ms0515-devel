@@ -253,6 +253,6 @@ start cleanly.  See also `GOTCHAS.md`.
 
 They're the exact toolchain that originally produced VVV's disks
 (MS-0515 RT-11 SJ V5.04, Soviet localisation, August 1989 build),
-recovered from the floppies under `disk_recovery/` and shipped here
+recovered from the floppies (the software collection's `recovery/`) and shipped here
 byte-for-byte.  Anything rebuilt with this toolset is link-compatible
 with everything else that lived on those floppies.
