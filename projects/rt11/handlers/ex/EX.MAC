@@ -6,7 +6,7 @@
 ; the machine can be booted from it.
 ;
 ; The kits carry it as a binary only; this is its source, written back
-; from that binary (docs/kb/dz_handler.md has the method).  Built behind
+; from that binary (../dz_handler.md has the method).  Built behind
 ; EXKIT.MAC it is the kit's EX.SYS to the byte.
 ;
 ; The board (src/core/include/ms0515/core/ramdisk.h, from its schematic):

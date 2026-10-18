@@ -7,7 +7,7 @@ they are built with.
 | folder | what |
 |---|---|
 | [`monitor/`](monitor/README.md) | The monitors: DEC's RT-11 V5.4 sources, a series of patches with what the machine changes in them, the machine's own modules (`OM*.MAC`), and a set of SYSGEN answers per system — ОМЕГА (two), ОСА, Mihin's, Rodionov's, all byte for byte the kits', and `dec`/`dec-ru`, DEC's own RT-11 on this machine. `build_monitor.py`. |
-| [`handlers/dz/`](handlers/dz/DZ.MAC) | The floppy handlers - `DZ`, and `DV` and `MZ` from the same source (a prefix file picks the kind), written for the machine from what the kits' binaries do (`docs/kb/dz_handler.md`): the first `DZ` here with a source, a primary driver of its own, the controller's address where DEC's FORMAT looks for it, and DEC's error logging. `validate.py` is its oracle. |
+| [`handlers/dz/`](handlers/dz/DZ.MAC) | The floppy handlers - `DZ`, and `DV` and `MZ` from the same source (a prefix file picks the kind), written for the machine from what the kits' binaries do (`handlers/dz_handler.md`): the first `DZ` here with a source, a primary driver of its own, the controller's address where DEC's FORMAT looks for it, and DEC's error logging. `validate.py` is its oracle. |
 | [`handlers/tt/`](handlers/tt/README.md) | The terminal handler: DEC's `TT.MAC` and a patch of six lines, which is ОМЕГА's `TT.SYS` to the byte. |
 | [`handlers/sl/`](handlers/sl/README.md) | The single-line editor: DEC's `SL.MAC` built for the VT52 the ROM's console is, with a patch of eight lines where DEC left that build unfinished.  A CMake project on `ms0515-run`, with its own tests. |
 | [`handlers/vm/`](handlers/vm/README.md) | The memory disk: seven of the extra banks as a 112-block volume through the ROM's bank routines.  Its source written back from the kits' binary, which it builds to the byte. |
@@ -51,7 +51,7 @@ with `ERL$G = 1` and one command:
 
 It was tried: with all of it built that way and an empty drive asked for a
 directory, `ERROUT` reported the eight tries, the registers, the function
-and the block (`docs/kb/dz_handler.md`).
+and the block (`handlers/dz_handler.md`).
 
 A monitor takes only handlers whose sysgen word is its own, so the
 conditionals of a system (`monitor/SYC*.MAC`) are the handlers'
