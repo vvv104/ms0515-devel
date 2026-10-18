@@ -1,0 +1,6 @@
+# built
+*.SAV
+*.MAP
+SAB2DT.MAC
+SAB2TN.REF
+source/__pycache__/
