@@ -7,25 +7,11 @@ on:
     branches: [main]
 
 jobs:
+  # One job: the emulator is checked on every compiler and platform by its
+  # own CI, and the programs here are PDP-11 binaries whatever the host.
   build:
-    name: ${{ matrix.os }} / ${{ matrix.compiler }}
-    runs-on: ${{ matrix.os }}
-    # Two jobs: the emulator is checked on every compiler by its own CI, and
-    # the programs here are PDP-11 binaries whatever the host.  gcc-13 carries
-    # the pdp11 compiler and everything built with it; MSVC is the owner's
-    # platform, where the toolset and the harnesses must work.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            compiler: gcc-13
-            conan_compiler: gcc
-            conan_compiler_version: "13"
-            cc: gcc-13
-            cxx: g++-13
-          - os: windows-latest
-            compiler: msvc
+    name: ubuntu / gcc-13
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v6
@@ -46,66 +32,53 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.conan2
-          key: conan-${{ matrix.os }}-${{ matrix.compiler }}-${{ hashFiles('deps.toml', 'conanfile.py') }}
+          key: conan-ubuntu-gcc-13-${{ hashFiles('deps.toml', 'conanfile.py') }}
           restore-keys: |
-            conan-${{ matrix.os }}-${{ matrix.compiler }}-
+            conan-ubuntu-gcc-13-
 
       - name: Install GCC 13
-        if: matrix.cc == 'gcc-13'
         run: sudo apt-get install -y gcc-13 g++-13
 
       - name: Configure Conan profile
-        shell: bash
         run: |
           conan profile detect --force
           PROFILE=~/.conan2/profiles/default
-
-          sed -i.bak -e 's/^compiler.cppstd=.*/compiler.cppstd=20/' "$PROFILE"
-
-          # Pin compiler + version for Linux jobs (auto-detect uses system default)
-          if [ -n "${{ matrix.conan_compiler }}" ]; then
-            sed -i -e 's/^compiler=.*/compiler=${{ matrix.conan_compiler }}/' "$PROFILE"
-            sed -i -e 's/^compiler\.version=.*/compiler.version=${{ matrix.conan_compiler_version }}/' "$PROFILE"
-          fi
-
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            sed -i -e 's/^compiler\.runtime=.*/compiler.runtime=static/' "$PROFILE"
-          fi
-
+          sed -i -e 's/^compiler.cppstd=.*/compiler.cppstd=20/' \
+                 -e 's/^compiler=.*/compiler=gcc/' \
+                 -e 's/^compiler\.version=.*/compiler.version=13/' "$PROFILE"
           {
             echo ""
             echo "[conf]"
-            if [ "${{ runner.os }}" = "Windows" ]; then
-              echo "tools.cmake.cmaketoolchain:generator=Ninja"
-            fi
-            if [ "${{ runner.os }}" = "Linux" ]; then
-              echo "tools.system.package_manager:mode=install"
-              echo "tools.system.package_manager:sudo=True"
-            fi
+            echo "tools.system.package_manager:mode=install"
+            echo "tools.system.package_manager:sudo=True"
           } >> "$PROFILE"
-
           echo "=== Conan profile ==="
           cat "$PROFILE"
 
       # The harnesses, with the emulator built inside the same build.
       - name: Build
-        shell: bash
         env:
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
+          CC: gcc-13
+          CXX: g++-13
         run: conan build . --build=missing
 
       - name: Toolset tests (Python)
-        if: matrix.cc == 'gcc-13'
         run: python -m pytest -q toolset/tests
 
+      # Minesweeper, built from its Pascal sources by the machine's PAS1,
+      # MACRO and LINK run with the ms0515-run of the build above.  (FIST
+      # and Manic Miner need the original games, which are never here.)
+      - name: Build Minesweeper
+        run: |
+          export MS0515_RUN="${{ github.workspace }}/build/Release/ms0515/tools/run/ms0515-run"
+          cmake -S projects/minesweeper -B projects/minesweeper/build -G Ninja
+          cmake --build projects/minesweeper/build
+
       # GCC for the machine (toolset/gcc): the cross compiler built from its
-      # sources on one Linux job - a quarter of an hour, so the installed
-      # compiler is cached by the script and the patch that make it - then
-      # the toolset's example programs and STARS built with it, run by the
-      # ms0515-run of the build above.
+      # sources - a quarter of an hour, so the installed compiler is cached
+      # by the script and the patch that make it - then the toolset's example
+      # programs and STARS built with it, run by the ms0515-run above.
       - name: Cache the pdp11 cross compiler
-        if: matrix.cc == 'gcc-13'
         id: pdp11-gcc
         uses: actions/cache@v5
         with:
@@ -113,13 +86,12 @@ jobs:
           key: pdp11-gcc-${{ hashFiles('toolset/gcc/build-toolchain.sh', 'toolset/gcc/gcc-pdp11-cmpsi.patch') }}
 
       - name: Build the pdp11 cross compiler
-        if: matrix.cc == 'gcc-13' && steps.pdp11-gcc.outputs.cache-hit != 'true'
+        if: steps.pdp11-gcc.outputs.cache-hit != 'true'
         run: |
           sudo apt-get install -y bison flex texinfo libgmp-dev libmpfr-dev libmpc-dev
           toolset/gcc/build-toolchain.sh ~/pdp11-gcc
 
       - name: Build the GCC toolset's examples and STARS
-        if: matrix.cc == 'gcc-13'
         run: |
           export MS0515_GCC=~/pdp11-gcc
           export MS0515_RUN="${{ github.workspace }}/build/Release/ms0515/tools/run/ms0515-run"
@@ -131,26 +103,32 @@ jobs:
       # UBIX with the same compiler: its diskettes, and rt11test.dsk with the
       # examples above and the collection's SABOT2 for /bin/rt11's tests.
       - name: Build UBIX
-        if: matrix.cc == 'gcc-13'
         run: |
           export MS0515_GCC=~/pdp11-gcc
           cmake -S projects/unix -B projects/unix/build -G Ninja
           cmake --build projects/unix/build
 
       # The two SL suites boot the dec system of the collection with its
-      # SL.SYS files and type at it.  The GCC toolset's examples, STARS and
-      # UBIX, built above on that job alone: the folder or image named makes
-      # a missing one a failure, not a skip.
+      # SL.SYS files and type at it; the rest run the programs built above,
+      # each named by its folder or image, so a missing one is a failure,
+      # not a skip.
       - name: Run tests
-        shell: bash
         working-directory: build/Release
         run: |
-          EXE=""
-          if [ "${{ runner.os }}" = "Windows" ]; then EXE=".exe"; fi
-          ./projects/rt11/handlers/sl/tests/sl_tests$EXE
-          ./projects/sl/tests/sltab_tests$EXE
-          if [ "${{ matrix.cc }}" = "gcc-13" ]; then
-            ./toolset/gcc/tests/gcc_tests --gcc-sav="${{ github.workspace }}/toolset/gcc/examples/build/sav"
-            ./projects/stars/tests/stars_tests --stars-sav="${{ github.workspace }}/projects/stars/build/sav"
-            ./projects/unix/tests/unix_tests --unix-dsk="${{ github.workspace }}/projects/unix/build/unix.dsk"
-          fi
+          ./projects/rt11/handlers/sl/tests/sl_tests
+          ./projects/sl/tests/sltab_tests
+          ./projects/minesweeper/tests/mine_tests --mine-game="${{ github.workspace }}/projects/minesweeper/build/game"
+          ./toolset/gcc/tests/gcc_tests --gcc-sav="${{ github.workspace }}/toolset/gcc/examples/build/sav"
+          ./projects/stars/tests/stars_tests --stars-sav="${{ github.workspace }}/projects/stars/build/sav"
+          ./projects/unix/tests/unix_tests --unix-dsk="${{ github.workspace }}/projects/unix/build/unix.dsk"
+
+      # What the run built, to take and try: Minesweeper, STARS and UBIX's
+      # release diskettes.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ms0515-devel-programs
+          path: |
+            projects/minesweeper/build/game
+            projects/stars/build/sav/STARS.SAV
+            projects/unix/build/ubix.dsk
+            projects/unix/build/ubix01.dsk

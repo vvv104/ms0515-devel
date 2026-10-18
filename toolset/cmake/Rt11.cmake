@@ -36,6 +36,11 @@ include("${CMAKE_CURRENT_LIST_DIR}/Ms0515.cmake")
 set(RT11_RUN_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/Rt11Run.cmake")
 set(RT11_PATCH_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/Rt11Patch.cmake")
 
+if(NOT MS0515_RUN AND DEFINED ENV{MS0515_RUN})
+    file(TO_CMAKE_PATH "$ENV{MS0515_RUN}" _ms0515_run)
+    set(MS0515_RUN "${_ms0515_run}" CACHE FILEPATH
+        "ms0515-run, which runs one RT-11 program from its folder")
+endif()
 find_program(MS0515_RUN NAMES ms0515-run
     HINTS "${MS0515_PACKAGE}"
     DOC "ms0515-run, which runs one RT-11 program from its folder")

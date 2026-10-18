@@ -8,8 +8,8 @@
 # The game is the project's build in projects/minesweeper/build
 # (see ../CMakeLists.txt); another folder is named on the command line:
 # mine_tests --mine-game=<folder>.  Everything skips itself when there is
-# none.  Without ms0515-run's machine (it needs the software collection)
-# the harness is left out.
+# none.  Without ms0515-run's machine (an emulator built without its
+# tools/run) the harness is left out.
 # ─────────────────────────────────────────────────────────────────────────────
 
 if(NOT TARGET ms0515_run_core)
