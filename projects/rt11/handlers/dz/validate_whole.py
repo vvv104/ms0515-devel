@@ -5,7 +5,7 @@ On a dec diskette running on our DZ, with our MZ and DV loaded:
   1. a marked diskette on the other drive - every block of it full of its
      own number - read through MZ1: gives blocks 0, 1 and 10 as 0, 1 and
      10, and through DV1: as 20, 21 and 30: what the kits' handlers gave
-     when they were measured (docs/kb/dz_handler.md);
+     when they were measured (../dz_handler.md);
   2. an empty diskette is initialised and written through each - a file
      of 49 blocks, so both sides and several cylinders - and the host
      tool, told the volume is a DV: or an MZ: one, reads it back out of

@@ -1,7 +1,7 @@
 # The MS 0515 floppy handler, taken apart
 
 What the kits' `DZ.SYS` does, read out of the binaries with
-ms0515-devel's `tools/rt11_handler.py`.  Written down because we have no source for any
+`tools/rt11_handler.py`.  Written down because we have no source for any
 of them and will be writing our own.
 
 ## The shape of a handler file
@@ -53,7 +53,7 @@ fourteen instructions, and it never touches the controller:
           JMP @270(R5)
 
 `160010` is the ROM entry we already knew as the sector-read trampoline
-(`docs/kb/DISK_COPYING.md`), `157730` the cell it takes the queue element
+(the emulator's [`docs/kb/DISK_COPYING.md`](https://github.com/vvv104/ms0515/blob/main/docs/kb/DISK_COPYING.md)), `157730` the cell it takes the queue element
 in.  Seeking, retrying and the sector interleave all happen inside the
 ROM, so this handler's behaviour is the ROM's — and the machines were
 modified, so that is not one behaviour but several.
@@ -147,11 +147,11 @@ first copy from drive 0 to drive 1 failed with a directory I/O error.
 * keep the shadow-register discipline exactly, or the ROM's motor
   time-out will fight it;
 * assemble with `ERL$G` so failures reach the error logger, the way our
-  own `HD.MAC` already does (ms0515-devel's `projects/rt11/handlers/hd/`).
+  own `HD.MAC` already does (`hd/`).
 
 ## Error logging works, and what stands in the way of switching it on
 
-Our `DZ.MAC` (ms0515-devel's `projects/rt11/handlers/dz/`) carries DEC's error logging under `ERL$G`, by the convention
+Our `DZ.MAC` (`dz/`) carries DEC's error logging under `ERL$G`, by the convention
 read out of DEC's `DX.MAC`: on a failed try `R2` points at the device's
 registers, `R3` is the most tries a request gets over the number of
 registers, `R4` the device's code over the tries left, `R5` the queue
@@ -176,12 +176,12 @@ an older spelling.
 
 It is not switched on in the `dec` profile - not for want of a handler
 any more: `TT` and `VM` are both written from scratch with `ERL$G`
-support now (ms0515-devel's `projects/rt11/handlers/tt/` and
+support now (`tt/` and
 `projects/rt11/handlers/vm/`), the same way `DZ` already had
 it.  `ERL$G` stays off in `dec`/`dec-ru` by policy instead: it is a
 SYSGEN conditional, all or nothing, so a monitor built with it refuses
 every kit handler - too much to pay for a log that stays empty on sound
-media (see ms0515-devel's `projects/rt11/README.md`, "Error logging: in the
+media (see `projects/rt11/README.md`, "Error logging: in the
 sources, not in the collection", for the diagnostic build that turns it
 on).
 
@@ -214,7 +214,7 @@ block it is, dumped through each handler:
 
 So `MZ` is the identity over a track-interleaved image and `DV` is that
 rotated by a constant twenty blocks - one cylinder - which is what
-`kDvRotate` in `Layout.hpp` has always said.  Reading the code alone the
+`kDvRotate` in the emulator's [`Layout.hpp`](https://github.com/vvv104/ms0515/blob/main/src/disk/include/ms0515/disk/Layout.hpp) has always said.  Reading the code alone the
 addend looks like one unit; the unit is a cylinder, because the divisor
 `2400` is twenty shifted left six, not ten shifted left seven.  `DZ`'s
 step of two between consecutive blocks is the 2:1 interleave, and block

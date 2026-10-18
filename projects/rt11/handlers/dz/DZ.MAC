@@ -3,7 +3,7 @@
 ; DZ.MAC - the floppy-disk handler of the MS 0515, written for it.
 ;
 ; Every kit of the machine carries a DZ.SYS and none carries its source.
-; This one is written from what those binaries do (docs/kb/dz_handler.md):
+; This one is written from what those binaries do (../dz_handler.md):
 ; it drives the WD1793-type controller itself, the way OMEGA's handler
 ; does, not through the ROM the way OSA's does - the ROM's disk routine
 ; reads and writes sectors and nothing else, and a handler of DEC's
