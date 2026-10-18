@@ -5,10 +5,10 @@
 
 [ms0515]
 url = "https://github.com/vvv104/ms0515.git"
-ref = "7016a78ea9887d30e98a6ab7c78a56e8079ebda1"
+ref = "dc13799c64b5022a497b7e41ee27d6406f3630f6"
 env = "MS0515_DIR"
 
 [ms0515-software]
 url = "https://github.com/vvv104/ms0515-software.git"
-ref = "c9a10867c4c92923e1737cd88f7c4441cd00fb71"
+ref = "ded16a1bc91d9bec56688cd82ef1bb89353d68d3"
 env = "MS0515_SOFTWARE"
