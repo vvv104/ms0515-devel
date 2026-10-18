@@ -32,9 +32,9 @@ Before writing MACRO-11 or C for the machine read `docs/programming.md`
   feature branch are allowed without asking; commits to `main` and any push
   still require permission.
 - **CI gates every merge — `main` must stay clean.**  The mandatory order:
-  open the PR → wait for CI green on the PR (all four platform jobs; the
-  gcc-13 job alone builds the pdp11 compiler, the GCC examples, STARS and
-  UBIX and runs their suites; local green is NOT cross-platform green) →
+  open the PR → wait for CI green on the PR (both jobs: ubuntu gcc-13,
+  which alone builds the pdp11 compiler, the GCC examples, STARS and UBIX
+  and runs their suites, and windows msvc; local green is NOT CI green) →
   merge → wait for CI green on `main`.  Fixes discovered along the way go
   through the feature branch, never directly onto `main`.
 - **Test-driven development**: after designing the interface, write the
