@@ -83,6 +83,6 @@ toolset/                     — build.py and cmake/ (MACRO/LINK by ms0515-run),
                                tests/ (pytest), GOTCHAS.md
 projects/<name>/             — one program each, with its sources, README and tests/: fist, manicm,
                                minesweeper, saper, stars, crypt (branch), unix (UBIX), rt11 (the
-                               RT-11 kit from DEC's sources), sl, decusc, banktest
+                               RT-11 kit from DEC's sources), sl, decusc
 tools/                       — this repository's own scripts (deps.py, rt11_handler.py)
 ```
