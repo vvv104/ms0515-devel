@@ -3,31 +3,14 @@
 Work the programs here owe to what the machine turned out to be.  The
 emulator (`../ms0515`) is built from the findings of the FPGA rebuild
 of the board (ms0515-fpga), and since its v1.21.0 (2026-11-07) it
-keeps three of the machine's habits the programs here were written
-without: the diskette turns, the keyboard's auto-repeat is the
-firmware's metronome code, the frame is 60 Hz.  Each item says what
+keeps two of the machine's habits the programs here were written
+without: the diskette turns, and the keyboard's auto-repeat is the
+firmware's metronome code.  (The frame rate stays 50 Hz: the kits'
+`CLOCK = 50.` was right - the timer interrupt is the frame sync, and the
+machines kept time in banks.)  Each item says what
 the machine does, what the program does, and what it takes.  Nothing
 here is a defect of the emulator: the core follows the machine, and the
 programs follow the core.
-
-## The dec kit's clock: SYSGEN says 50 cycles, the machine runs 60
-
-**The machine.**  Every board on the schematic and the owner's own
-had the 60 Hz jumper; the timer interrupt comes 60 times a second.
-The RT-11 kits in the collection - Omega's, OSA's, Mihin's, Rodionov's
-- were generated for a 50-cycle clock (`CLOCK = 50.`), read nothing
-off Register B, and so their `TIME` ran 20 % fast on the machine; they
-are the plant's and the authors' binaries and stay as they were.  The
-dec kit (`projects/rt11`) is ours, generated from DEC's sources with
-the same `CLOCK = 50.` in `SYCDEC.MAC`.
-
-**What it takes.**  `CLOCK = 60.` in SYCDEC.MAC, the kit built again,
-and everything made from it taken anew: the collection's `kits/dec/`,
-the emulator's `src/tools/run/assets/system.dsk` and the state
-`ms0515-run` carries (its `tools/run_assets.py` and the bake), and the
-emulator's clock test (`test_clock_time.cpp`), which counts the
-monitor's minute as 3000 ticks because the kit says 50.  A line in the
-kit's notes that it is the one kit whose clock is right.
 
 ## MANICM's held keys expire under the metronome code
 
