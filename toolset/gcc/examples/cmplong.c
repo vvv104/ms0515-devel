@@ -1,5 +1,5 @@
 /* CMPLONG - signed comparisons of longs, the way GCC 15.2's pdp11
- * backend gets them wrong (README.md, "A trap in the compiler"): when
+ * backend gets them wrong (README.md, "The patches, and why"): when
  * the high words are equal it compares the low words with a signed
  * branch, so a low word with bit 15 set reads as negative.  For each
  * pair of the table a line of six digits: x > y, x < y, x >= y, x <= y,

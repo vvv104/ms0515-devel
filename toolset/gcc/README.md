@@ -43,10 +43,61 @@ rest under `<prefix>/bin`.  libgcc is compiled with `-m10` too, so that
 nothing it brings in executes an instruction the processor lacks.  The
 host needs gcc, make, bison, flex, texinfo and the GMP/MPFR/MPC
 development packages; the build takes a quarter of an hour.  On Windows
-this is a WSL job for now: the compiler, cmake and ninja run there, and
-`ms0515-run.exe` is called from there as a Windows program.
+it runs in WSL (below).
 
 Set `MS0515_GCC` to the prefix, or put `<prefix>/bin` on the PATH.
+
+## On Windows
+
+The compiler is built and used in WSL; the emulator stays the Windows
+one, and a program built in WSL is run there by `ms0515-run.exe`.  This
+way was checked from a clean install on 2026-11-19: Windows 11, WSL 2.6,
+Ubuntu 24.04.
+
+1. WSL with Ubuntu, from PowerShell:
+
+   ```
+   wsl --install -d Ubuntu-24.04
+   ```
+
+   The first start of Ubuntu asks for a user name and a password.  That
+   user is WSL's default one, and the Windows drives in `/mnt/c` are his;
+   CMake builds in a folder there only as him (as another user `cmake`
+   stops at `configure_file: Operation not permitted`).
+
+2. The packages, in Ubuntu:
+
+   ```
+   sudo apt update
+   sudo apt install -y build-essential patch bison flex texinfo \
+       libgmp-dev libmpfr-dev libmpc-dev wget xz-utils cmake ninja-build python3
+   ```
+
+3. The repositories are the Windows ones (Getting started in the
+   repository's README); WSL sees them under `/mnt/c/...`.  The shell
+   scripts keep LF line ends on a Windows checkout (`.gitattributes`), so
+   they run from there.  The compiler goes to the Linux home:
+
+   ```
+   /mnt/c/<path>/ms0515-devel/toolset/gcc/build-toolchain.sh
+   echo 'export MS0515_GCC=~/pdp11-gcc' >> ~/.bashrc && source ~/.bashrc
+   ```
+
+4. The examples, in WSL, and one of them run by the Windows emulator:
+
+   ```
+   cd /mnt/c/<path>/ms0515-devel
+   cmake -S toolset/gcc/examples -B toolset/gcc/examples/build -G Ninja
+   cmake --build toolset/gcc/examples/build
+   cd toolset/gcc/examples/build/sav
+   /mnt/c/<path>/ms0515/package/ms0515-run.exe HELLO
+   ```
+
+   prints `HELLO FROM GCC`.
+
+5. The tests run on the Windows side: `conan build . --build=missing` in
+   `ms0515-devel` builds `gcc_tests`, which takes the `.SAV`s from
+   `toolset/gcc/examples/build/sav` (Tests, below).
 
 ## A project
 
@@ -133,59 +184,88 @@ is the shape.
   leading underscore, the arguments on the stack at `2(sp)`, `4(sp)`...,
   the result in r0, r0 and r1 scratch, r2..r5 kept.
 
-## A trap in the compiler
+## The patches, and why
 
-GCC 15.2's pdp11 backend compiles a **signed comparison of two longs**
-wrongly when their high words are equal: it compares the high words,
-and if they are the same, the low words - with the same signed branch,
-so a low word with bit 15 set reads as negative.  `40000L > 5L` is
-false, `32768L >= 0` too.  Comparisons whose high words differ, unsigned
-comparisons and tests for equality are right.  libgcc's own 32-bit
-division falls into this (its `__udivmodsi4` tests the divisor's sign),
-which is why `rt/arith.s` carries the 32-bit divisions as well.
+GCC's pdp11 backend is patched once, by `gcc-pdp11-cmpsi.patch`, which
+`build-toolchain.sh` applies before the build; `patch-gcc.py` made it and
+remakes it for another GCC.  It makes six changes.  Three of them are
+there because of the MS 0515's processor: the KR1807VM1 is a T-11, which
+has no EIS - no `MUL`, `DIV`, `ASH`, `ASHC` - and no FPP, so the code is
+generated with `-m10`, a path of the backend few programs walk.  The
+other three mend faults of the backend that any PDP-11 target has,
+met in our own code.  Each has an example whose test fails on a compiler
+without the patch.
 
-`build-toolchain.sh` applies a fix, `gcc-pdp11-cmpsi.patch` (made by
-`patch-gcc.py`, which remakes it for another GCC): after the last
-compare of a two- or four-word comparison, five words set N and V from
-C, so that a signed branch reads the unsigned order of the low words
-and an unsigned one sees what it saw.  `examples/cmplong.c` is the
-proof, and its test fails on a compiler without the fix.
+| change | why | where it showed | test |
+|---|---|---|---|
+| shifts by a constant written out | the T-11 has no `ASH` | `x >> 5` in every rotation | - |
+| multiply and divide priced as calls | the T-11 has no `MUL` and `DIV` | UBIX | MULCOST |
+| shift by a variable count | the loop that stands for `ASH` | UBIX | VARSHIFT |
+| signed comparison of longs | a fault of the backend | the C library's 32-bit arithmetic | CMPLONG |
+| long read through a pointer | a fault of the backend | UBIX | LONGP0, LONGPS |
+| zeroed variables in the bss | a fault of the backend | a program's file carrying its zeros | BSSZERO |
 
-The same patch changes one more thing: a shift by a constant.  Without
-`ASH` the backend writes a shift by up to 3 as single shifts and a
-longer one as a loop - four words, three instructions a step - so `x >>
-5` cost seventeen instructions; the patch writes shifts out up to 8
-when speed is wanted (`-O2`), and keeps the loop from 4 under `-Os`.
+**Shifts by a constant.**  Without `ASH` the backend writes a shift by up
+to 3 as single shifts and a longer one as a loop - four words, three
+instructions a step - so `x >> 5` cost seventeen instructions.  The patch
+writes shifts out up to 8 when speed is wanted (`-O2`) and keeps the loop
+from 4 under `-Os`.  This is speed only: the loop was right, and nothing
+fails without the change.
 
-Two more faults the patch mends.  A **long read through a pointer**
-into the register pair the pointer was in - the pointer in `r0`, the
-long for `r0:r1` - was loaded high word first, over the pointer, and the
-low word read through what had just come in (`mov 4(r0),r0` / `mov
-6(r0),r1`): every such read at `-O0`, and at `-Os` where a function gave
-the pointer back.  The move now loads the address register last;
+**The price of a multiply.**  The backend priced a multiply as one `MUL`
+- under `-Os` as any one instruction - when without EIS it is a call of
+`__mulhi3`, some eighty instructions.  `-Os` therefore rewrote a walk
+over a table by a pointer as a step count times the element's size, two
+calls a step (UBIX's buffer cache).  Multiply, divide and remainder are
+priced as the calls they are now; `examples/mulcost.c` reads its own walk
+for a call and finds none.
+
+**A shift by a variable count.**  Without `ASH` such a shift is a loop
+counting down a copy of the count, and the pattern declared the copy
+clobbered by `match_dup`; copy propagation put the count itself in the
+copy's place, so a loop's index shifted by came out of the shift as 0
+and the loop round it never ended (UBIX's `ls -l`, its permission bits).
+The clobbered register is an output of its own now, the count tied to
+it; `examples/varshift.c` hangs without the fix.
+
+**A signed comparison of two longs.**  When their high words are equal
+the backend compares the low words with the same signed branch, so a low
+word with bit 15 set reads as negative: `40000L > 5L` is false, `32768L
+>= 0` too.  Comparisons whose high words differ, unsigned comparisons and
+tests for equality were right.  libgcc's own 32-bit division falls into
+it (its `__udivmodsi4` tests the divisor's sign).  After the last compare
+of a two- or four-word comparison, five words now set N and V from C, so
+that a signed branch reads the unsigned order of the low words and an
+unsigned one sees what it saw; `examples/cmplong.c` is the proof.
+
+**A long read through a pointer** into the register pair the pointer was
+in - the pointer in `r0`, the long for `r0:r1` - was loaded high word
+first, over the pointer, and the low word read through what had just come
+in (`mov 4(r0),r0` / `mov 6(r0),r1`): every such read at `-O0`, and at
+`-Os` where a function gave the pointer back (UBIX's kernel, its file
+system).  The move loads the address register last now;
 `examples/longptr.c`, built at `-O0` (LONGP0) and at `-Os` (LONGPS), is
-the proof.  And the backend priced a **multiply** as one `MUL`, which
-the T-11 has not - under `-Os` as any one instruction - when without EIS
-it is a call of `__mulhi3`, some eighty instructions: `-Os` rewrote a
-walk over a table by a pointer as a step count times the element's
-size, two calls a step.  Multiply, divide and remainder are priced as
-the calls they are now; `examples/mulcost.c` reads its own walk for a
-call and finds none.  Last, **zeroed variables** were written into
-`.data` as `.=.+N`, so a program's file carried its zeros; they go to
-`.bss` now, and `examples/bsszero.c` finds its arrays between `_edata`
-and `_end`.  (A `.SAV` holds its memory whole, bss and all; the gain is
-for programs loaded by a loader that clears the bss, as the UNIX
-kernel's.)  And a **shift by a count in a variable**, a loop without
-`ASH`, counted down a copy of the count the pattern clobbered by
-`match_dup`; copy propagation put the count itself in the copy's place,
-so a loop's index shifted by came out of it as 0 and the loop round it
-never ended (`ls -l`'s permission bits found it).  The clobbered register
-is an output of its own now, the count tied to it; `examples/varshift.c`
-hangs without the fix.  The five tests fail on a compiler without the
-patch.
+the proof.
 
-`-m10` also means the PDP-11/10, which had no `XOR` and no `SOB`; the
-T-11 has both, and GCC asks for a `__xorhi3` instead (in `rt/arith.s`).
+**Zeroed variables** were written into `.data` as `.=.+N`, so a
+program's file carried its zeros; they go to `.bss` now, and
+`examples/bsszero.c` finds its arrays between `_edata` and `_end`.  A
+`.SAV` holds its memory whole, bss and all; the gain is for programs
+loaded by a loader that clears the bss, as UBIX's kernel.
+
+Besides the patch, what the toolset does for the processor without
+touching GCC's sources:
+
+- libgcc is built with `-m10` (`build-toolchain.sh`), so that nothing it
+  brings in executes an instruction the T-11 lacks; the projects are
+  compiled with `-m10` too (`pdp11-rt11.cmake`).
+- `rt/arith.s` carries the 16-bit multiply, divide and remainder, which
+  libgcc has none of for pdp11, and the 32-bit ones, libgcc's division
+  being the one the comparison fault broke.
+- `-m10` also means the PDP-11/10, which had no `XOR` and no `SOB`; the
+  T-11 has both, but GCC calls a `__xorhi3` for `^`, which `rt/arith.s`
+  gives it, and writes no `SOB`.
+- The output is a.out; `aout2sav.py` makes it an RT-11 `.SAV`.
 
 ## How fast
 

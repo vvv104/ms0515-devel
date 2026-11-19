@@ -1,5 +1,5 @@
 /* BSSZERO - a zeroed static array in the bss, the way GCC 15.2's pdp11
- * backend did not put it (README.md, "A trap in the compiler"): with the
+ * backend did not put it (README.md, "The patches, and why"): with the
  * GNU assembler's syntax it wrote every zeroed variable into .data as
  * `.=.+N`, so a program's file carried its zeros - harmless in an RT-11
  * .SAV, which holds the memory whole, but a UNIX program or a kernel
