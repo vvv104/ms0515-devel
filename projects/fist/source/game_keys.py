@@ -97,7 +97,9 @@ KS1:    MOVB    @#177440,R0          ; read the scancode
         BNE     2$
         BR      KS0
 1$:     JSR     PC,KREFR             ; any key event: refresh the running timers
-        CMP     R0,#254              ; auto-repeat code (real MS7004): that is all
+        CMP     R0,#254              ; the TO's auto-repeat code, which no keyboard
+                                     ;   sends: the firmware repeats by 264, which
+                                     ;   matches no key below
         BEQ     KS0
         CMP     R0,#300              ; "1": start a 1-player game from the demo
         BNE     15$

@@ -333,8 +333,10 @@ BORDER: MOV     #VRAM,R0
         DEC     R1
         BNE     3$
         RTS     PC
-        ; --- KGET: wait for a key and return its make code in R0 (the MS7004's
-        ;     auto-repeat 0254 and ALL-UP 0263 are not keys). -------------------
+        ; --- KGET: wait for a key and return its make code in R0 (ALL-UP 0263
+        ;     is not a key; 0254 is the TO's auto-repeat code, which no keyboard
+        ;     sends - the firmware repeats a held key by 0264, which KGET
+        ;     returns as a key). ------------------------------------------------
 KGET:   MOVB    @#177442,R0
         BITB    #2,R0
         BEQ     KGET
