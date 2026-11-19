@@ -113,11 +113,6 @@ KTMR   = 3              ; passes a key stays "held" after its first code:
                         ;   in the emulator's game mode, 250 typing; a real
                         ;   MS7004 waits 500 - KTMR 6 there)
 KTMRR  = 1              ; passes after a repeat, which come every 30-50 ms
-KGAPF  = 9.             ; frames within which a key's first 264 follows its
-                        ;   code: the delay, 125 ms in the game mode (a real
-                        ;   MS7004's 500 ms - KGAPF 27 there)
-KGAPR  = 4              ; frames within which a 264 follows a 264: the
-                        ;   period, 50 ms (33 on a real MS7004)
 
 ; --- HWINIT / HWEXIT / BORDER -----------------------------------------
 ; Register C is write-only, so a shadow of it, RCSHAD, is kept.
@@ -256,37 +251,26 @@ PSRC:   .WORD   0
 
 ; --- KEYS: the MS7004 keyboard and the joystick -----------------------
 ; The keyboard's bytes arrive by interrupt: KBISR queues them in a ring
-; of sixteen, KEYS takes them out.  The MS7004 sends a code when a key
-; goes down and repeats it (as 264, below) while the key stays down, but
-; sends nothing
-; when it comes up (only ALL-UP, 263, once every key is released after a
-; modifier).  So a key is "held" for KTMR passes after its first code
-; (the keyboard is silent that long before it repeats) and KTMRR after
-; each repeat.  The keyboard repeats only the newest key down, so a code
-; says more than its key: a key pressed before it may still be down and
-; is never heard from again while it is - so it stays held KTMR passes
-; more, the silence the keyboard keeps before it resumes an older key's
-; repeat; a key pressed after it must have been let go, or it would be
-; the one repeating - so SPACE tapped while an arrow is held ends when
-; the arrow repeats again (the core's keyboard resumes the older key's
-; repeat; a real MS7004 may not).  A timer at 0 ran out at the last pass
-; and can still be refreshed; -1 is a key let go.  The price: a key let
-; go less than a pass before another is pressed counts as held with it,
-; and one let go while a newer key repeats is held until that key is
-; let go too, then KTMR passes more.
-;
-; The keyboard sends a key's code once; while the key stays down it sends
-; 264, the metronome, in its place (the firmware's L_2B0).  When the newest
-; key goes up and an older one is still down, the keyboard keeps its
-; delay and then sends 264 again - for the older key, with nothing to say
-; so.  KBISR notes the frame each byte came in, and KREPT tells the two
-; apart by it: a 264 within KGAPF frames of a key's code, or KGAPR of the
-; last 264, repeats that key; a later one says that key went up, and the
-; keys pressed before it are the ones still down.
+; of sixteen, KEYS takes them out.  The MS7004 sends a key's code when it
+; goes down and nothing when it comes up (only ALL-UP, 263, once every key
+; is released after a modifier); while keys are down it sends 264, the
+; metronome (the firmware's L_2B0), for the newest of them - and, once
+; that one is let go, for the one under it, on the delay counter the last
+; press set (L_1EF, L_237..L_27D), with nothing to say which.  So a 264
+; is read as a repeat of the last code that came.  A key is "held" for
+; KTMR passes after its first code (the keyboard is silent that long
+; before it repeats) and KTMRR after each repeat; a key pressed before
+; the one a code names may still be down and is never heard from while
+; it is, so it stays held KTMR passes more; one pressed after it must
+; have been let go, or it would be the newest.  A repeat never touches a
+; jump key (ONESHT): a jump is its own press alone, since a 264 after a
+; jump key tapped on the move is the walk key's as much as the jump's -
+; SPACE tapped while P is held jumps once.  The price: a jump key held
+; does not jump again on landing.  A timer at 0 ran out at the last pass
+; and can still be refreshed; -1 is a key let go.
 KBISR:  MOV     R0,-(SP)
         MOV     KBHEAD,R0
         MOVB    @#KBDATA,KBRING(R0)
-        MOVB    FRAMES,KBTIME(R0)       ; the frame it came in
         INC     R0
         BIC     #^C17,R0
         MOV     R0,KBHEAD
@@ -300,14 +284,14 @@ KEYS:   MOV     R3,-(SP)
         BEQ     10$
         MOVB    KBRING(R1),R0
         BIC     #177400,R0
-        MOVB    KBTIME(R1),R2   ; the frame it came in
-        BIC     #177400,R2
         INC     R1
         BIC     #^C17,R1
         MOV     R1,KBTAIL
-        CMP     R0,#264         ; the metronome: the code of the key it
-        BNE     2$              ;   repeats, 0 for an older one
-        JSR     PC,KREPT
+        CLR     REPF
+        CMP     R0,#264         ; the metronome: a repeat of the last code
+        BNE     2$              ;   (0 when there is none: no key named)
+        MOV     LASTK,R0
+        INC     REPF
         BR      4$
 2$:     CMP     R0,#263         ; ALL-UP: nothing is held (no last key
         BNE     3$              ;   either: the keyboard wraps a key in
@@ -321,8 +305,6 @@ KEYS:   MOV     R3,-(SP)
         CMP     R0,#257
         BEQ     4$
         MOV     R0,LASTK        ; a key's own code: the one 264 repeats
-        MOV     R2,LASTT
-        CLR     LASTR
 4$:     INC     PRESSN          ; a press, until the code proves a repeat
         MOV     #-1,R4          ; the key's slot, when it is a key of ours
         MOV     #KTAB,R3        ;   ('0' is two: a jump key and a digit)
@@ -332,7 +314,11 @@ KEYS:   MOV     R3,-(SP)
         MOVB    (R3)+,R2
         CMPB    R1,R0
         BNE     8$
-        ASL     R2
+        TST     REPF            ; a repeat never touches a jump key
+        BEQ     81$
+        TSTB    ONESHT(R2)
+        BNE     8$
+81$:    ASL     R2
         MOV     R2,R4
         TST     KTIMS(R2)       ; a key let go: its first code; else a repeat
         BMI     42$
@@ -346,10 +332,15 @@ KEYS:   MOV     R3,-(SP)
         MOV     KSEQ(R4),R0     ; the other keys held at the last pass (0 =
         MOV     #KTIMS,R3       ;   the timer ran out there; -1 is let go):
         MOV     #KSEQ,R4        ;   one pressed before this key stays held
-        MOV     #NTIMS,R1       ;   through a silence (the keyboard never
-44$:    TST     (R3)            ;   repeats it, and pauses before it resumes
-        BMI     45$             ;   it), one pressed after it has been let go
-        CMP     (R4),R0         ;   - the keyboard repeats the newest key
+        MOV     #ONESHT,R2      ;   through a silence (the keyboard never
+        MOV     #NTIMS,R1       ;   repeats it while this one is newer), one
+44$:    TST     (R3)            ;   pressed after it has been let go - the
+        BMI     45$             ;   keyboard repeats the newest key down,
+        TST     REPF            ;   so this one is the newest; a jump key
+        BEQ     47$             ;   is left to a repeat's own count
+        TSTB    (R2)
+        BNE     45$
+47$:    CMP     (R4),R0
         BEQ     45$             ;   down, so this one is the newest
         BHI     46$
         MOV     #KTMR,(R3)
@@ -357,16 +348,23 @@ KEYS:   MOV     R3,-(SP)
 46$:    MOV     #-1,(R3)
 45$:    TST     (R3)+
         TST     (R4)+
+        INC     R2
         SOB     R1,44$
         BR      1$
 41$:    MOV     #KTIMS,R3       ; a code of no key of ours: the keys held at
-        MOV     #NTIMS,R1       ;   the last pass stay held through a silence
+        MOV     #ONESHT,R2      ;   the last pass stay held through a silence
+        MOV     #NTIMS,R1       ;   (but for a repeat, the jump keys)
 6$:     TST     (R3)
         BMI     7$
-        MOV     #KTMR,(R3)
+        TST     REPF
+        BEQ     61$
+        TSTB    (R2)
+        BNE     7$
+61$:    MOV     #KTMR,(R3)
 7$:     TST     (R3)+
+        INC     R2
         SOB     R1,6$
-        BR      1$
+        JMP     1$              ; (out of a branch's reach)
 10$:    CLR     R0              ; the timers -> the bits, each counting down
         CLR     R1              ;   to 0 (held this pass, the last) and on to
         MOV     #KTIMS,R3       ;   -1 (let go): the first eight the controls,
@@ -422,41 +420,6 @@ KEYS:   MOV     R3,-(SP)
         MOV     (SP)+,R3
         RTS     PC
 
-; KREPT: a 264 that came at frame R2 -> R0, the code of the key it
-; repeats, or 0 when it repeats a key pressed before the one whose code
-; came last (no key named: the keys held stay held, KEYS' 41$).  A 264
-; after a pause is the keyboard resuming an older key: the last one's
-; timers are let go.
-KREPT:  MOV     R2,R0
-        SUB     LASTT,R0
-        BIC     #177400,R0      ; frames since the stream's last byte
-        MOV     R2,LASTT
-        MOV     #KGAPF,R2       ; after a key's own code: the keyboard's delay
-        TST     LASTR
-        BEQ     1$
-        MOV     #KGAPR,R2       ;   after a repeat: its period
-1$:     MOV     #1,LASTR
-        CMP     R0,R2
-        BHI     2$
-        MOV     LASTK,R0        ; that key, still down
-        RTS     PC
-2$:     MOV     LASTK,R0        ; a pause: it went up
-        BEQ     5$
-        CLR     LASTK
-        MOV     #KTAB,R2        ; every timer it serves let go
-3$:     MOVB    (R2)+,R1
-        BEQ     5$
-        BIC     #177400,R1
-        CMP     R1,R0
-        BNE     4$
-        MOVB    (R2),R1
-        ASL     R1
-        MOV     #-1,KTIMS(R1)
-4$:     INC     R2
-        BR      3$
-5$:     CLR     R0
-        RTS     PC
-
 ; The keys: (scancode, timer) pairs, 0 ends the table.  A key may serve
 ; several timers.  Timers 0..7 are the controls (left, right, jump,
 ; ENTER, music, pause, SHIFT, SPACE), 8..17 the digits '1'..'0'.
@@ -477,14 +440,15 @@ KTAB:   .BYTE   342,0, 314,0, 303,0, 327,0, 336,0     ; O U Q E T: left
         .BYTE   0
         .EVEN
 NTIMS  = 18.
+ONESHT: .BYTE   0,0,1,0,0,0,1,1         ; the jump timers (jump, SHIFT, SPACE):
+        .BYTE   0,0,0,0,0,0,0,0,0,0     ;   a repeat leaves them alone
+        .EVEN
 KTIMS:  .BLKW   NTIMS
 KSEQ:   .BLKW   NTIMS           ; the press each key's timer came from
 PRESSN: .WORD   0               ; presses so far
 LASTK:  .WORD   0               ; the key a 264 repeats (0: none named)
-LASTT:  .WORD   0               ; the frame of the stream's last byte (low 8 bits)
-LASTR:  .WORD   0               ; that byte was a 264
+REPF:   .WORD   0               ; the byte KEYS works on was a 264
 KBRING: .BLKB   16.
-KBTIME: .BLKB   16.             ; the frame each byte came in
 KBHEAD: .WORD   0
 KBTAIL: .WORD   0
 KBSAVE: .BLKW   2
