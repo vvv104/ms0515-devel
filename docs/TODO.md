@@ -5,62 +5,13 @@ emulator (`../ms0515`) is built from the findings of the FPGA rebuild
 of the board (ms0515-fpga), and since its v1.21.0 (2026-11-07) it
 keeps two of the machine's habits the programs here were written
 without: the diskette turns, and the keyboard's auto-repeat is the
-firmware's metronome code.  (The frame rate stays 50 Hz, the rate the
+firmware's metronome code - the second done below, the first open.  (The frame rate stays 50 Hz, the rate the
 kits' `CLOCK = 50.` counts - the timer interrupt is the frame sync; the
 boards photographed carry the 72 Hz jumper, and whether the emulator
 follows them is open.)  Each item says what
 the machine does, what the program does, and what it takes.  Nothing
 here is a defect of the emulator: the core follows the machine, and the
 programs follow the core.
-
-## MANICM's held keys expire under the metronome code
-
-**The machine.**  The MS 7004 sends a key's code when it goes down and
-nothing when it comes up; while a key stays down it sends 264 (the
-LK201's metronome) at its repeat rate - never the key's code again
-(the firmware's `L_2B0`; the emulator's `docs/hardware/keyboard.md`,
-264).  Both ROMs understand 264 and repeat the last key themselves; a
-program that reads the USART itself sees the code once and 264 after.
-
-**The program.**  `projects/manicm/MS0515.MAC`, KEYS: a key is held for
-KTMR passes after its code and KTMRR after each repeat, and a repeat is
-recognised by *the key's own code* coming again (`CMPB R1,R0` against
-the key table).  With 264 in place of it no timer is refreshed: an
-arrow held down expires after KTMR passes and Willy stops walking.  The
-comment above KEYS describes the old core's keyboard, which resent the
-key.
-
-**What it takes.**  Keep the code of the newest key down; on 264
-refresh that key's timer as its own code would (and, as FIST does,
-any other timer still running - keys pressed together stay held while
-the newest repeats).  `tests/ManicmGame.hpp` runs the emulator's
-keyboard with its auto-repeat, so the test that holds a key across the
-repeat delay shows it.  Twenty lines and the comment.
-
-## FIST's KSCAN names the repeat code 254
-
-**The program.**  `projects/fist/source/game_keys.py`, KSCAN: every
-code refreshes the running timers first (KREFR, the chord rule), so a
-264 keeps the held keys held and the game plays; but the line after it,
-`CMP R0,#254 ; auto-repeat code (real MS7004)`, names the technical
-description's figure, which the keyboard never sends (the ROM maps 254
-to `$`), and 264 falls through to the key tables and matches nothing.
-
-**What it takes.**  264 in that compare and in the note; a look at
-`KSCAN_NOTE`, which says "a key's make / repeat code sets its timer" -
-the repeat code sets no timer of its own, the refresh does the work.
-
-## Saper's held keys do not repeat
-
-**The program.**  `projects/saper/source/gen_saper.py` polls the USART
-(`LPK`, `LPKD`) and acts on the code's value - F2, the arrows, the
-digits.  A key held down used to repeat its action on the old core's
-repeated code; now the repeats are 264, which matches nothing, so a
-held arrow moves the cursor once.
-
-**What it takes.**  Decide whether a held arrow should walk: if so,
-remember the last code and take 264 as that code again; if not, say so
-in the README, which describes the polling.
 
 ## The diskette's turn and the loaders
 
@@ -80,12 +31,47 @@ turn is on there) and note its load time beside the old one; a loader
 that reads a block at a time with work between is the one to change,
 if any does.
 
+## Done: the metronome code and the keys (2026-11-19)
+
+**The machine.**  The MS 7004 sends a key's code when it goes down and
+nothing when it comes up; while keys are down it sends 264 (the LK201's
+metronome) at its repeat rate for the newest of them - never the key's
+code again (the firmware's `L_2B0`) - and, once that one is let go, for
+the one under it, on the one delay counter the last press set (`L_1EF`,
+`L_237`..`L_27D`; the emulator keeps that counter since its fix of the
+fall-back, `docs/hardware/keyboard.md` there).  Nothing in the bytes
+says which key a 264 repeats.  Both ROMs repeat the last key themselves.
+
+- **The GCC toolset's library** (`toolset/gcc/machine/keys.c`): `ms_key`
+  gives a 264 back as the last key's code, as the ROMs do; `ms_held`
+  works on it as before.  STARS and the HELD example take their keys
+  this way, through the library's own handler on vector 130 - not
+  through the ROM - and were affected; `gcc_tests` and `stars_tests`
+  pass.
+- **MANICM** (`MS0515.MAC`, KEYS): a 264 repeats the last code; a
+  repeat keeps the walk keys held and never touches a jump key (ONESHT),
+  since after SPACE tapped on the move it is the walk key's as much as
+  SPACE's.  SPACE tapped while P is held jumps once; SPACE held jumps
+  once and not again on landing - the price, pinned by a test.
+- **FIST** (`source/game_keys.py`, `source/game_text.py`): KSCAN compares
+  with 264, where the code only refreshes the running timers (the chord
+  rule); KGET, the settings screens' key reader, skips 264 - it took the
+  repeat of a held key for the next key.  On the way: SETKEY, the key
+  redefinition, kept its count and its names' pointer in registers PRTXT
+  takes, and never ended; and the game's tests booted the vvv104 Omega on
+  ROM-A, which the emulator ships as dumped since 2026-09-19, so the game
+  never started there (11 of 21 failed) - they boot ROM-B now.  22 of 22.
+- **Saper** (`source/gen_saper.py`): its three USART reads go through
+  KREAD, which gives a 264 back as the last key's code; a held arrow
+  walks the cursor.  `saper_tests` are new, and CI builds Saper and runs
+  them (its text font is the ROM's now, not a Windows font file).
+
 ## Not affected, looked at
 
 - **UBIX** takes its keys through the ROM (`kernel/tty.c`, `rom.s`),
   which understands 264: auto-repeat works as before.  Its tty is the
   ROM's.
-- **STARS, Minesweeper, DECUS C, SL** read no USART of their own.
+- **Minesweeper, DECUS C, SL** read no USART of their own.
 - **The keyboard's clock** (the timer's counter 0, which the emulator
   now listens to): the ROM programs it at boot and none of the programs
   here touches counters 0 and 1.
