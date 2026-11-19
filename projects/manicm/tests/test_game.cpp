@@ -51,6 +51,22 @@ TEST_CASE("manicm: P walks Willy right, SPACE makes him jump")
     CHECK(willyColumn(g) >= x1);
 }
 
+TEST_CASE("manicm: a key held for three seconds walks Willy all the way")
+{
+    /* The keyboard sends P's code once, then 264 - the metronome - while
+     * P stays down: the hold has to live on the 264s, not on P's code. */
+    if (!manicm::built()) { MESSAGE("MANICM not built - skipped"); return; }
+    ManicmGame g("manicm_hold");
+    g.startGame();
+    g.emu.keyPress(Key::P, true);
+    g.settle(100);                                 // well past the first repeats
+    const int x = willyColumn(g);
+    g.settle(50);
+    const int x2 = willyColumn(g);
+    g.emu.keyPress(Key::P, false);
+    CHECK(x2 > x);                                 // still walking at the end
+}
+
 TEST_CASE("manicm: a key let go stops Willy within a pass or two")
 {
     if (!manicm::built()) { MESSAGE("MANICM not built - skipped"); return; }

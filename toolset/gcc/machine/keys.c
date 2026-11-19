@@ -13,8 +13,10 @@
  * sends 264, the metronome, in place of it (the firmware's L_2B0), and
  * both ROMs repeat the last key themselves on 264.  ms_key does as the
  * ROMs do: a 264 comes out as the code of the last key, so a held key
- * is still a stream of its own code.  The modifiers' codes are not a
- * last key - the keyboard repeats no modifier - and ALL-UP leaves none. */
+ * is still a stream of its own code.  The modifiers' codes and ALL-UP
+ * are not a last key: the keyboard repeats no modifier, and it wraps a
+ * key in Shift and ALL-UP when the key's case needs it, the key's
+ * repeats coming after the wrapping. */
 
 #include <ms0515.h>
 #include "internal.h"
@@ -61,9 +63,7 @@ int ms_key(void)
 				return last;
 			continue;		/* a repeat of nothing we saw */
 		}
-		if (c == MS_KEY_ALL_UP)
-			last = -1;
-		else if (c != MS_KEY_SHIFT && c != KEY_CTRL)
+		if (c != MS_KEY_SHIFT && c != KEY_CTRL && c != MS_KEY_ALL_UP)
 			last = c;
 		return c;
 	}

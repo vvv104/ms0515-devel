@@ -299,6 +299,9 @@ SCF8   = 146
 SCF9   = 147
 SCF10  = 150
 SCV    = 362
+SCREP  = 264                    ; the metronome: the keyboard's repeat (KREAD)
+
+        .GLOBL  CURX,CURY,XMIN,XMAX     ; for the tests
 
 START:  MOV     #340,R0
         MTPS    R0                      ; mask all IRQs while setting up
@@ -405,8 +408,7 @@ LPK:    MOV     @#177442,R0
         BIT     #2,R0
         BNE     LPKD                    ; key present, go process
         JMP     LOOP                    ; nothing, retry (LOOP is too far for BR)
-LPKD:   MOV     @#177440,R0
-        BIC     #177400,R0
+LPKD:   JSR     PC,KREAD
 
         ; F2 - new game with current difficulty
         CMP     R0,#SCF2
@@ -1534,9 +1536,31 @@ KWAIT:  MOV     #3377,@#177400
         MOV     @#177442,R0
         BIT     #2,R0
         BEQ     KWAIT
-        MOV     @#177440,R0
-        BIC     #177400,R0
+        JSR     PC,KREAD
         RTS     PC
+
+;-------------------------------------------------------------------
+; KREAD - the byte in the keyboard's USART -> R0.  The keyboard sends a
+;         key's code once and then 264, the metronome, while the key
+;         stays down (the firmware's L_2B0); KREAD gives a 264 back as
+;         the code of the last key, as both ROMs do, so a held arrow
+;         walks the cursor.  Shift, Ctrl and ALL-UP are no last key: the
+;         keyboard repeats no modifier and wraps a key in Shift and
+;         ALL-UP for its case.  A 264 before any key is 0, no key.
+KREAD:  MOV     @#177440,R0
+        BIC     #177400,R0
+        CMP     R0,#SCREP
+        BNE     1$
+        MOV     LASTK,R0
+        RTS     PC
+1$:     CMP     R0,#256
+        BEQ     2$
+        CMP     R0,#257
+        BEQ     2$
+        CMP     R0,#263
+        BEQ     2$
+        MOV     R0,LASTK
+2$:     RTS     PC
 
 ;-------------------------------------------------------------------
 ; EXIT - clean shutdown back to RT-11 monitor.  Never returns.
@@ -1572,8 +1596,7 @@ HLPS2:  MOV     #3377,@#177400          ; keep dispatcher live
         MOV     @#177442,R0
         BIT     #2,R0
         BEQ     HLPS2
-        MOV     @#177440,R0
-        BIC     #177400,R0
+        JSR     PC,KREAD
         CMP     R0,#SCDN
         BNE     HLPS3
         MOV     #1,HELPPG               ; page 2
@@ -2087,6 +2110,7 @@ DLC:    BIS     (R0)+,(R1)
 
 ;-------------------------------------------------------------------
 SEED:   .WORD   1
+LASTK:  .WORD   0                       ; the key a 264 repeats (KREAD)
 CURX:   .WORD   0
 CURY:   .WORD   0
 KOK:    .WORD   0
