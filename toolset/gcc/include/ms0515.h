@@ -103,8 +103,10 @@ void ms_wait_frames(unsigned n);
  * The MS7004's bytes taken off vector 130 into a ring (the ROM's handler
  * would hand them to RT-11); 231 sent first, keyclick off, which the
  * firmware takes as "a game runs" and repeats keys sooner.  A key sends
- * its code when pressed and again while held, never a release: a held
- * key is a timer refreshed by its code (ms_held below). */
+ * its code when pressed and 264 at the repeat period while held, never a
+ * release; ms_key gives the 264 back as the last key's code, as the ROMs
+ * do, so a held key reads as its code again and again: a timer refreshed
+ * by its code (ms_held below). */
 
 #define MS_KEY_UP     0252
 #define MS_KEY_DOWN   0251
@@ -153,7 +155,7 @@ void ms_wait_frames(unsigned n);
 
 void ms_keys_begin(void);
 void ms_keys_end(void);
-/* The next code that came, or -1. */
+/* The next code that came, or -1; a repeat (264) as the last key's code. */
 int ms_key(void);
 /* The codes that came and were not read, dropped. */
 void ms_keys_flush(void);
