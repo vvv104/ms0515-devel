@@ -5,9 +5,10 @@ emulator (`../ms0515`) is built from the findings of the FPGA rebuild
 of the board (ms0515-fpga), and since its v1.21.0 (2026-11-07) it
 keeps two of the machine's habits the programs here were written
 without: the diskette turns, and the keyboard's auto-repeat is the
-firmware's metronome code.  (The frame rate stays 50 Hz: the kits'
-`CLOCK = 50.` was right - the timer interrupt is the frame sync, and the
-machines kept time in banks.)  Each item says what
+firmware's metronome code.  (The frame rate stays 50 Hz, the rate the
+kits' `CLOCK = 50.` counts - the timer interrupt is the frame sync; the
+boards photographed carry the 72 Hz jumper, and whether the emulator
+follows them is open.)  Each item says what
 the machine does, what the program does, and what it takes.  Nothing
 here is a defect of the emulator: the core follows the machine, and the
 programs follow the core.
