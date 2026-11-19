@@ -55,12 +55,18 @@ into upper RAM at startup; without the file the program traps.
 ## Tests
 
 `saper_tests`, built by the repository's `CMakeLists.txt`, boots the
-built game through RT-11 and presses its keys: an arrow tapped moves the
+built game through RT-11 and checks it from outside: F1's help page is
+the help text in the ROM's font cell by cell, an arrow tapped moves the
 cursor a cell, an arrow held walks it to the board's edge.  The keyboard
 repeats a held key by 264, the metronome, not by its code; `KREAD` gives
 a 264 back as the last key's code, as the ROMs do.  The suite skips when
-the game is not built; the build is Windows-only for now (`toolset/build.py`
-runs `ms0515-run.exe`), so CI does not run it.
+the game is not built, unless its folder is named (`--saper-dir=`), as CI
+names it after building the game.
+
+The text is drawn in the machine's own 8x8 font: `gen_saper.py` takes
+the glyphs from the emulator's ROM-B image (`src/assets/rom/`), each of
+the two tables found by the shape of one glyph, KOI-8 040..0177 and
+0300..0377.
 
 ## Controls
 

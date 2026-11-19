@@ -45,7 +45,10 @@ inline std::string optOr(const char *name, const std::string &dflt)
     return it == options().end() || it->second.empty() ? dflt : it->second;
 }
 
-inline std::string gameFile(const char *ext) { return std::string{SAPER_DIR} + "/SAPER." + ext; }
+/* The game's folder: --saper-dir, else the project's.  Named, a game not
+ * there is a failure, not a skip (CI names it). */
+inline bool named() { return options().count("dir") != 0; }
+inline std::string gameFile(const char *ext) { return optOr("dir", SAPER_DIR) + "/SAPER." + ext; }
 inline std::string savPath()   { return optOr("sav", gameFile("SAV")); }
 inline std::string hlpPath()   { return optOr("hlp", gameFile("HLP")); }
 inline std::string datPath()   { return optOr("dat", gameFile("DAT")); }
@@ -114,6 +117,8 @@ public:
         ++frame_;
     }
     void settle(int n) { for (int i = 0; i < n; ++i) step(); }
+
+    const uint8_t *vram() { return board_get_vram(&board()); }
 
     void keyTap(ms0515::Key k, int holdFrames)
     {

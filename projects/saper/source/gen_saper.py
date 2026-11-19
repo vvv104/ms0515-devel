@@ -12,6 +12,7 @@ Output:
     SAPER.MAC  the MACRO-11 source for assembly by MACRO.SAV + LINK.SAV
 """
 import struct
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -31,50 +32,37 @@ assert len(KHLP_BYTES) >= 3680 + 2
 assert len(NSEQ_BYTES) >= 3680 - 2
 
 # ---------------------------------------------------------------------------
-# Crisp 8x8 cp866 bitmap font extracted from Windows' cga80866.fon (the same
-# CGA 80-col Russian font DOS used).  Stored as a 256-entry KOI-8R lookup
-# (FNTMAP) into a compact glyph pool (FNTGLY) covering only the byte values
-# we actually render.  This keeps FNTMAP+FNTGLY+KHLP+NSEQ all below VRAM at
-# 0o40000 - reads above that address return pixel data instead of the byte
-# we expected.
-def _extract_cp866_font(path):
-    raw = open(path, 'rb').read()
-    ne_off = struct.unpack_from('<I', raw, 0x3C)[0]
-    rsrc_off = ne_off + struct.unpack_from('<H', raw, ne_off + 0x24)[0]
-    shift = struct.unpack_from('<H', raw, rsrc_off)[0]
-    pos = rsrc_off + 2
-    fnt_off = None
-    while True:
-        type_id = struct.unpack_from('<H', raw, pos)[0]
-        if type_id == 0:
-            break
-        count = struct.unpack_from('<H', raw, pos + 2)[0]
-        pos += 8
-        if (type_id & 0x7FFF) == 0x08:
-            fnt_off = struct.unpack_from('<H', raw, pos)[0] << shift
-            break
-        pos += count * 12
-    assert fnt_off is not None, 'no RT_FONT'
-    bits_off = struct.unpack_from('<I', raw, fnt_off + 113)[0]
-    first_ch = raw[fnt_off + 95]
-    glyphs = {}
-    for ci in range(first_ch, raw[fnt_off + 96] + 1):
-        g = raw[fnt_off + bits_off + (ci - first_ch) * 8:][:8]
-        # FNT v2.0 8x8 fixed-pitch fonts are row-major: g[r] is row r, bit 7 =
-        # leftmost pixel - matching how we write bytes into VRAM.
-        glyphs[ci] = list(g)
-    return glyphs
+# The machine's own 8x8 font, out of its ROM (the emulator's ROM-B image):
+# the console draws its text from it.  Two tables, eight bytes a glyph, bit 7
+# the leftmost pixel - as we write bytes into VRAM: KOI-8 040..0177 in order,
+# and the Cyrillic 0300..0377.  Each is found by the shape of one glyph, as
+# the emulator's terminal decoder and the GCC toolset's ms_glyph find them.
+# Stored as a 256-entry KOI-8R lookup (FNTMAP) into a compact glyph pool
+# (FNTGLY) covering only the byte values we actually render.  This keeps
+# FNTMAP+FNTGLY+KHLP+NSEQ all below VRAM at 0o40000 - reads above that
+# address return pixel data instead of the byte we expected.
+sys.path.insert(0, str(HERE.parents[2] / 'toolset'))
+from ms0515 import emulator                                  # noqa: E402
 
-_CP866 = _extract_cp866_font('C:/Windows/Fonts/cga80866.fon')
+ROM = (emulator() / 'src' / 'assets' / 'rom' / 'ms0515-romb.rom').read_bytes()
+
+
+def _font_base(shape, index):
+    at = ROM.find(bytes(shape))
+    assert at >= 0, 'font anchor not in the ROM'
+    return at - index * 8
+
+
+_MAIN = _font_base([0x00, 0x3C, 0x46, 0x4A, 0x52, 0x62, 0x3C, 0x00], 0o20)  # '0'
+_ALT = _font_base([0x30, 0x78, 0xCC, 0xCC, 0xFC, 0xCC, 0xCC, 0x00], 33)     # 0341
+
 
 def _koi8r_to_glyph(b):
-    if b < 0x20:
-        return None
-    try:
-        cp866_byte = bytes([b]).decode('koi8-r').encode('cp866')[0]
-    except (UnicodeDecodeError, UnicodeEncodeError):
-        return None
-    return _CP866.get(cp866_byte)
+    if 0o40 <= b < 0o200:
+        return list(ROM[_MAIN + (b - 0o40) * 8:][:8])
+    if b >= 0o300:
+        return list(ROM[_ALT + (b - 0o300) * 8:][:8])
+    return None                     # the pseudographics: not in this half
 
 # Old in-source ASCII font + custom English help kept for reference only.
 # Not emitted to MAC anymore (replaced by the KOI-8R FONT_BYTES + K.HLP path).
@@ -2254,7 +2242,7 @@ for i in range(3680):
                    else (KHLP_BYTES[i] - NSEQ_BYTES[i - 2]) & 0xFF)
 USED_BYTES.update(b'0123456789')
 
-# Drop control chars and any byte whose glyph isn't in the CGA font.
+# Drop control chars and any byte whose glyph isn't in the ROM's font.
 needed = []
 for b in sorted(USED_BYTES):
     if b < 0x20:
