@@ -333,16 +333,15 @@ BORDER: MOV     #VRAM,R0
         DEC     R1
         BNE     3$
         RTS     PC
-        ; --- KGET: wait for a key and return its make code in R0 (ALL-UP 0263
-        ;     is not a key; 0254 is the TO's auto-repeat code, which no keyboard
-        ;     sends - the firmware repeats a held key by 0264, which KGET
-        ;     returns as a key). ------------------------------------------------
+        ; --- KGET: wait for a key and return its make code in R0 (the
+        ;     metronome 0264, by which the firmware repeats a held key, and
+        ;     ALL-UP 0263 are not keys). ----------------------------------------
 KGET:   MOVB    @#177442,R0
         BITB    #2,R0
         BEQ     KGET
         MOVB    @#177440,R0
         BIC     #177400,R0
-        CMP     R0,#254
+        CMP     R0,#264
         BEQ     KGET
         CMP     R0,#263
         BEQ     KGET
@@ -475,8 +474,10 @@ SETKEY: JSR     PC,CLS
         MOV     #KEYTB2,R5
 1$:     MOV     #KNAMES,R3
         MOV     #9.,R4
-2$:     MOV     #VRAM+{at(5, 92)}.,R0
-        MOV     (R3)+,R1
+2$:     MOV     R3,-(SP)             ; PRTXT takes R0..R4: the names' pointer
+        MOV     R4,-(SP)             ;   and the count kept round it
+        MOV     #VRAM+{at(5, 92)}.,R0
+        MOV     (R3),R1
         JSR     PC,PRTXT
         JSR     PC,KGET
         MOVB    R0,(R5)              ; the pair's scancode (its bits are fixed)
@@ -484,6 +485,9 @@ SETKEY: JSR     PC,CLS
         MOV     #VRAM+{at(5, 92)}.,R0
         MOV     #BLNK12,R1
         JSR     PC,PRTXT
+        MOV     (SP)+,R4
+        MOV     (SP)+,R3
+        TST     (R3)+                ; the next name
         DEC     R4
         BNE     2$
         TST     SETPLY
