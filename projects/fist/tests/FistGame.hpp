@@ -95,11 +95,14 @@ public:
     ms0515::Emulator emu;
 
     /* Stage the folder devices under %TEMP%/<name>, mount, boot the game:
-     * the loading screen shows during the load, the attract demo follows. */
+     * the loading screen shows during the load, the attract demo follows.
+     * ROM-B: the vvv104 Omega of toolset/system runs on it, as on its
+     * owner's machine - its clock calls ROM-B's cursor blink at 160014,
+     * which the ROM-A the emulator ships as dumped does not have. */
     explicit FistGame(const char *name, int bootFrames = 1200)
     {
         stage(name);
-        REQUIRE(emu.loadRomFile(std::string{ASSETS_DIR} + "/rom/ms0515-roma.rom"));
+        REQUIRE(emu.loadRomFile(std::string{ASSETS_DIR} + "/rom/ms0515-romb.rom"));
         emu.reset();
         REQUIRE(emu.mountDisk(0, (boot_ / "device.rtfs").string()));
         REQUIRE(emu.mountDisk(1, (work_ / "device.rtfs").string()));
