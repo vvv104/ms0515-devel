@@ -62,13 +62,13 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 sys.path.insert(0, str(HERE))
-from ms0515 import package                 # noqa: E402
+from ms0515 import run_tool                # noqa: E402
 import decsys                               # noqa: E402
 from rt11 import RT11CommandError           # noqa: E402
 
 # ms0515-run, the emulator's tool that runs one RT-11 program from its
 # folder (src/tools/run): what a command of a recipe is run with.
-RUNNER = [str(package() / "ms0515-run.exe")]
+RUNNER = [str(run_tool())]
 
 # The longest a single program may take, in seconds of the host's time.  A
 # program that ends runs unthrottled; one still there after this has stopped

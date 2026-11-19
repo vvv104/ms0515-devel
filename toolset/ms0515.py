@@ -11,6 +11,8 @@ same way everywhere, each time asked (a test may set the variables):
                      when not set (tools/deps.py puts it there)
     MS0515_PACKAGE   its binaries; MS0515_DIR/package when not set (the
                      emulator's own build puts them there)
+    MS0515_RUN       its ms0515-run; in MS0515_PACKAGE when not set (a
+                     build elsewhere, as CI's, names it so)
     MS0515_SOFTWARE  the software collection; ../ms0515-software beside
                      this one when not set
 """
@@ -38,6 +40,13 @@ def emulator() -> Path:
 def package() -> Path:
     """The emulator's binaries (and their assets/)."""
     return _from_env("MS0515_PACKAGE", _from_env("MS0515_DIR", DEVEL.parent / "ms0515") / "package")
+
+
+def run_tool() -> Path:
+    """ms0515-run, which runs one RT-11 program from its folder: MS0515_RUN,
+    else in the package, named as the host names a program."""
+    name = "ms0515-run.exe" if os.name == "nt" else "ms0515-run"
+    return _from_env("MS0515_RUN", package() / name)
 
 
 def software() -> Path:
