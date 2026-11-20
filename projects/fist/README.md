@@ -67,7 +67,6 @@ projects/fist/
 ├── FIST.MAC           generated MACRO-11 source (build artifact)
 ├── FIST.SAV           built .SAV image - `R FIST` at the dot prompt
 ├── FIST.DAT            game-state data the loader reads (build artifact)
-├── validate.py        OS-oracle smoke test (boots, runs, checks clean exit)
 └── source/
     ├── gen_fist.py      pre_build hook: dispatches on FIST_MODE, emits FIST.MAC
     ├── gamelogic_mac.py the routine-level generator + verification images (FIST_GL=...)
