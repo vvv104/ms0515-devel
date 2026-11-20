@@ -1,6 +1,6 @@
 /* LONGPTR - a long read through a pointer into the registers the
  * pointer was in, the way GCC 15.2's pdp11 backend got it wrong (README.md,
- * "A trap in the compiler"): with the pointer in r0 and the long going to
+ * "The patches, and why"): with the pointer in r0 and the long going to
  * r0:r1 it loaded the high word first, over the pointer, and read the low
  * word through what it had just loaded.  Built twice, at -O0 (LONGP0),
  * where every such read went wrong, and at -Os (LONGPS), where a pointer

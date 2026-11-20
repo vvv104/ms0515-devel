@@ -186,7 +186,7 @@ TEST_CASE("CMPLONG: signed comparisons of longs, the compiler's fix in place") {
 
 /* GCC 15.2's pdp11 backend read a long through a pointer into the
  * registers the pointer was in high word first, over the pointer; the
- * patch orders the words (README.md, "A trap in the compiler").  LONGP0
+ * patch orders the words (README.md, "The patches, and why").  LONGP0
  * is examples/longptr.c at -O0, LONGPS the same at -Os; both fail on a
  * compiler without the fix. */
 static void checkLongptr(const char *name)

@@ -12,6 +12,7 @@ Output:
     SAPER.MAC  the MACRO-11 source for assembly by MACRO.SAV + LINK.SAV
 """
 import struct
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -31,50 +32,37 @@ assert len(KHLP_BYTES) >= 3680 + 2
 assert len(NSEQ_BYTES) >= 3680 - 2
 
 # ---------------------------------------------------------------------------
-# Crisp 8x8 cp866 bitmap font extracted from Windows' cga80866.fon (the same
-# CGA 80-col Russian font DOS used).  Stored as a 256-entry KOI-8R lookup
-# (FNTMAP) into a compact glyph pool (FNTGLY) covering only the byte values
-# we actually render.  This keeps FNTMAP+FNTGLY+KHLP+NSEQ all below VRAM at
-# 0o40000 - reads above that address return pixel data instead of the byte
-# we expected.
-def _extract_cp866_font(path):
-    raw = open(path, 'rb').read()
-    ne_off = struct.unpack_from('<I', raw, 0x3C)[0]
-    rsrc_off = ne_off + struct.unpack_from('<H', raw, ne_off + 0x24)[0]
-    shift = struct.unpack_from('<H', raw, rsrc_off)[0]
-    pos = rsrc_off + 2
-    fnt_off = None
-    while True:
-        type_id = struct.unpack_from('<H', raw, pos)[0]
-        if type_id == 0:
-            break
-        count = struct.unpack_from('<H', raw, pos + 2)[0]
-        pos += 8
-        if (type_id & 0x7FFF) == 0x08:
-            fnt_off = struct.unpack_from('<H', raw, pos)[0] << shift
-            break
-        pos += count * 12
-    assert fnt_off is not None, 'no RT_FONT'
-    bits_off = struct.unpack_from('<I', raw, fnt_off + 113)[0]
-    first_ch = raw[fnt_off + 95]
-    glyphs = {}
-    for ci in range(first_ch, raw[fnt_off + 96] + 1):
-        g = raw[fnt_off + bits_off + (ci - first_ch) * 8:][:8]
-        # FNT v2.0 8x8 fixed-pitch fonts are row-major: g[r] is row r, bit 7 =
-        # leftmost pixel - matching how we write bytes into VRAM.
-        glyphs[ci] = list(g)
-    return glyphs
+# The machine's own 8x8 font, out of its ROM (the emulator's ROM-B image):
+# the console draws its text from it.  Two tables, eight bytes a glyph, bit 7
+# the leftmost pixel - as we write bytes into VRAM: KOI-8 040..0177 in order,
+# and the Cyrillic 0300..0377.  Each is found by the shape of one glyph, as
+# the emulator's terminal decoder and the GCC toolset's ms_glyph find them.
+# Stored as a 256-entry KOI-8R lookup (FNTMAP) into a compact glyph pool
+# (FNTGLY) covering only the byte values we actually render.  This keeps
+# FNTMAP+FNTGLY+KHLP+NSEQ all below VRAM at 0o40000 - reads above that
+# address return pixel data instead of the byte we expected.
+sys.path.insert(0, str(HERE.parents[2] / 'toolset'))
+from ms0515 import emulator                                  # noqa: E402
 
-_CP866 = _extract_cp866_font('C:/Windows/Fonts/cga80866.fon')
+ROM = (emulator() / 'src' / 'assets' / 'rom' / 'ms0515-romb.rom').read_bytes()
+
+
+def _font_base(shape, index):
+    at = ROM.find(bytes(shape))
+    assert at >= 0, 'font anchor not in the ROM'
+    return at - index * 8
+
+
+_MAIN = _font_base([0x00, 0x3C, 0x46, 0x4A, 0x52, 0x62, 0x3C, 0x00], 0o20)  # '0'
+_ALT = _font_base([0x30, 0x78, 0xCC, 0xCC, 0xFC, 0xCC, 0xCC, 0x00], 33)     # 0341
+
 
 def _koi8r_to_glyph(b):
-    if b < 0x20:
-        return None
-    try:
-        cp866_byte = bytes([b]).decode('koi8-r').encode('cp866')[0]
-    except (UnicodeDecodeError, UnicodeEncodeError):
-        return None
-    return _CP866.get(cp866_byte)
+    if 0o40 <= b < 0o200:
+        return list(ROM[_MAIN + (b - 0o40) * 8:][:8])
+    if b >= 0o300:
+        return list(ROM[_ALT + (b - 0o300) * 8:][:8])
+    return None                     # the pseudographics: not in this half
 
 # Old in-source ASCII font + custom English help kept for reference only.
 # Not emitted to MAC anymore (replaced by the KOI-8R FONT_BYTES + K.HLP path).
@@ -299,6 +287,9 @@ SCF8   = 146
 SCF9   = 147
 SCF10  = 150
 SCV    = 362
+SCREP  = 264                    ; the metronome: the keyboard's repeat (KREAD)
+
+        .GLOBL  CURX,CURY,XMIN,XMAX     ; for the tests
 
 START:  MOV     #340,R0
         MTPS    R0                      ; mask all IRQs while setting up
@@ -405,8 +396,7 @@ LPK:    MOV     @#177442,R0
         BIT     #2,R0
         BNE     LPKD                    ; key present, go process
         JMP     LOOP                    ; nothing, retry (LOOP is too far for BR)
-LPKD:   MOV     @#177440,R0
-        BIC     #177400,R0
+LPKD:   JSR     PC,KREAD
 
         ; F2 - new game with current difficulty
         CMP     R0,#SCF2
@@ -1534,9 +1524,31 @@ KWAIT:  MOV     #3377,@#177400
         MOV     @#177442,R0
         BIT     #2,R0
         BEQ     KWAIT
-        MOV     @#177440,R0
-        BIC     #177400,R0
+        JSR     PC,KREAD
         RTS     PC
+
+;-------------------------------------------------------------------
+; KREAD - the byte in the keyboard's USART -> R0.  The keyboard sends a
+;         key's code once and then 264, the metronome, while the key
+;         stays down (the firmware's L_2B0); KREAD gives a 264 back as
+;         the code of the last key, as both ROMs do, so a held arrow
+;         walks the cursor.  Shift, Ctrl and ALL-UP are no last key: the
+;         keyboard repeats no modifier and wraps a key in Shift and
+;         ALL-UP for its case.  A 264 before any key is 0, no key.
+KREAD:  MOV     @#177440,R0
+        BIC     #177400,R0
+        CMP     R0,#SCREP
+        BNE     1$
+        MOV     LASTK,R0
+        RTS     PC
+1$:     CMP     R0,#256
+        BEQ     2$
+        CMP     R0,#257
+        BEQ     2$
+        CMP     R0,#263
+        BEQ     2$
+        MOV     R0,LASTK
+2$:     RTS     PC
 
 ;-------------------------------------------------------------------
 ; EXIT - clean shutdown back to RT-11 monitor.  Never returns.
@@ -1572,8 +1584,7 @@ HLPS2:  MOV     #3377,@#177400          ; keep dispatcher live
         MOV     @#177442,R0
         BIT     #2,R0
         BEQ     HLPS2
-        MOV     @#177440,R0
-        BIC     #177400,R0
+        JSR     PC,KREAD
         CMP     R0,#SCDN
         BNE     HLPS3
         MOV     #1,HELPPG               ; page 2
@@ -2087,6 +2098,7 @@ DLC:    BIS     (R0)+,(R1)
 
 ;-------------------------------------------------------------------
 SEED:   .WORD   1
+LASTK:  .WORD   0                       ; the key a 264 repeats (KREAD)
 CURX:   .WORD   0
 CURY:   .WORD   0
 KOK:    .WORD   0
@@ -2230,7 +2242,7 @@ for i in range(3680):
                    else (KHLP_BYTES[i] - NSEQ_BYTES[i - 2]) & 0xFF)
 USED_BYTES.update(b'0123456789')
 
-# Drop control chars and any byte whose glyph isn't in the CGA font.
+# Drop control chars and any byte whose glyph isn't in the ROM's font.
 needed = []
 for b in sorted(USED_BYTES):
     if b < 0x20:

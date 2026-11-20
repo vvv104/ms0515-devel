@@ -170,7 +170,7 @@ code.
 | function | what |
 |---|---|
 | `void ms_keys_begin(void)`, `void ms_keys_end(void)` | the vector taken and given back |
-| `int ms_key(void)` | the next code that came, or -1 |
+| `int ms_key(void)` | the next code that came, or -1.  The keyboard repeats a held key by 264, the metronome, not by its code; `ms_key` gives a 264 back as the code of the last key, as the ROMs do (Shift's and Ctrl's codes and ALL-UP are no last key) |
 | `void ms_keys_flush(void)` | the codes that came and were not read, dropped: at a scene's start, so that a key let go a second ago does not act in it |
 | `struct ms_held { unsigned char code, frames; }` | a key watched: its code, its timer |
 | `void ms_held_tick(struct ms_held *keys, int n)` | a frame gone: every timer down by one |

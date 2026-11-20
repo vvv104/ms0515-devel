@@ -10,7 +10,7 @@
 # <work folder> (<prefix>-build when not said), which can go afterwards.
 #
 # GCC's pdp11 backend is patched first (gcc-pdp11-cmpsi.patch: README.md,
-# "A trap in the compiler").  libgcc is compiled for the PDP-11/10
+# "The patches, and why").  libgcc is compiled for the PDP-11/10
 # instruction set (-m10), which is what the KR1807VM1 (a T-11) executes:
 # no EIS, no FPP.  The projects then build with `-m10` too (Rt11Gcc.cmake
 # sets it).

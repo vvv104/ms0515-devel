@@ -74,6 +74,14 @@ jobs:
           cmake -S projects/minesweeper -B projects/minesweeper/build -G Ninja
           cmake --build projects/minesweeper/build
 
+      # SAPER: gen_saper.py writes its MACRO-11 (the text in the ROM's own
+      # font, out of the emulator's assets), toolset/build.py runs MACRO and
+      # LINK with the same ms0515-run.
+      - name: Build SAPER
+        run: |
+          export MS0515_RUN="${{ github.workspace }}/build/Release/ms0515/tools/run/ms0515-run"
+          python toolset/build.py projects/saper/build.toml
+
       # GCC for the machine (toolset/gcc): the cross compiler built from its
       # sources - a quarter of an hour, so the installed compiler is cached
       # by the script and the patch that make it - then the toolset's example
@@ -118,6 +126,7 @@ jobs:
           ./projects/rt11/handlers/sl/tests/sl_tests
           ./projects/sl/tests/sltab_tests
           ./projects/minesweeper/tests/mine_tests --mine-game="${{ github.workspace }}/projects/minesweeper/build/game"
+          ./projects/saper/tests/saper_tests --saper-dir="${{ github.workspace }}/projects/saper"
           ./toolset/gcc/tests/gcc_tests --gcc-sav="${{ github.workspace }}/toolset/gcc/examples/build/sav"
           ./projects/stars/tests/stars_tests --stars-sav="${{ github.workspace }}/projects/stars/build/sav"
           ./projects/unix/tests/unix_tests --unix-dsk="${{ github.workspace }}/projects/unix/build/unix.dsk"

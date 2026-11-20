@@ -51,6 +51,22 @@ TEST_CASE("manicm: P walks Willy right, SPACE makes him jump")
     CHECK(willyColumn(g) >= x1);
 }
 
+TEST_CASE("manicm: a key held for three seconds walks Willy all the way")
+{
+    /* The keyboard sends P's code once, then 264 - the metronome - while
+     * P stays down: the hold has to live on the 264s, not on P's code. */
+    if (!manicm::built()) { MESSAGE("MANICM not built - skipped"); return; }
+    ManicmGame g("manicm_hold");
+    g.startGame();
+    g.emu.keyPress(Key::P, true);
+    g.settle(100);                                 // well past the first repeats
+    const int x = willyColumn(g);
+    g.settle(50);
+    const int x2 = willyColumn(g);
+    g.emu.keyPress(Key::P, false);
+    CHECK(x2 > x);                                 // still walking at the end
+}
+
 TEST_CASE("manicm: a key let go stops Willy within a pass or two")
 {
     if (!manicm::built()) { MESSAGE("MANICM not built - skipped"); return; }
@@ -83,6 +99,27 @@ TEST_CASE("manicm: SPACE tapped while P is held jumps once, not again on landing
     for (int i = 0; i < 60; ++i) { g.step(); if (g.peek8("AIRBRN") == 1) { ++jumpsAfter; break; } }
     g.emu.keyPress(Key::P, false);
     CHECK(jumpsAfter == 0);                        // SPACE was let go: no second jump
+}
+
+TEST_CASE("manicm: SPACE held jumps once - a jump is its own press alone")
+{
+    /* The keyboard repeats by 264 with no word of which key: after a jump
+     * key tapped on the move it is the walk key's as much as the jump's, so
+     * a repeat never re-triggers a jump.  The price, pinned here: a jump key
+     * held does not jump again on landing. */
+    if (!manicm::built()) { MESSAGE("MANICM not built - skipped"); return; }
+    ManicmGame g("manicm_spaceheld");
+    g.startGame();
+    g.emu.keyPress(Key::Space, true);
+    int jumps = 0, was = 0;
+    for (int i = 0; i < 250; ++i) {                // long enough for three jumps
+        g.step();
+        const int air = g.peek8("AIRBRN") == 1;
+        if (air && !was) ++jumps;
+        was = air;
+    }
+    g.emu.keyPress(Key::Space, false);
+    CHECK(jumps == 1);
 }
 
 TEST_CASE("manicm: the demo runs through the caverns")

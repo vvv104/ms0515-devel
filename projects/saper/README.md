@@ -13,6 +13,8 @@ projects/saper/
 ├── SAPER.SAV          built .SAV image — drop on a boot disk and RUN SAPER
 ├── SAPER.HLP          help-text file (KHLP[4096] + NSEQ[3680] padded to 16 blk)
 ├── SAPER.DAT          sprite atlas (= original Pascal SAPER's K.DAT verbatim)
+├── SAPER.MAP          LINK's map: where the tests find CURX, CURY, XMIN, XMAX
+├── tests/             saper_tests: the game booted headlessly, its keys checked
 └── source/            hook scripts + raw inputs
     ├── gen_saper.py     pre_build hook — emits SAPER.MAC from a template
     ├── make_artifacts.py post_build hook — builds SAPER.HLP, copies SAPER.DAT
@@ -38,8 +40,8 @@ universal driver in `toolset/build.py` does the rest:
 2. Stages `SAPER.MAC` into a scratch work folder with the toolchain out of
    the software collection: DEC's LINK, SYSLIB and SYSMAC, the kit's MACRO.
 3. Runs the machine's own programs there with `ms0515-run`, one after
-   another: `MACRO SAPER=SAPER`, `LINK SAPER=SAPER`.
-4. Copies `SAPER.SAV` back to this directory.
+   another: `MACRO SAPER=SAPER`, `LINK SAPER,SAPER=SAPER`.
+4. Copies `SAPER.SAV` and `SAPER.MAP` back to this directory.
 5. Runs `source/make_artifacts.py` (post_build) → combines `K.HLP + NSEQ.BIN`
    into `SAPER.HLP` and copies `K.DAT` to `SAPER.DAT`.
 
@@ -49,6 +51,22 @@ Put all three release files (`SAPER.SAV`, `SAPER.HLP`, `SAPER.DAT`)
 on the boot disk of an MS-0515 with RT-11 SJ V5.04, then `RUN SAPER`
 at the dot prompt.  `SAPER.HLP` is required: help text is `.READW`-loaded
 into upper RAM at startup; without the file the program traps.
+
+## Tests
+
+`saper_tests`, built by the repository's `CMakeLists.txt`, boots the
+built game through RT-11 and checks it from outside: F1's help page is
+the help text in the ROM's font cell by cell, an arrow tapped moves the
+cursor a cell, an arrow held walks it to the board's edge.  The keyboard
+repeats a held key by 264, the metronome, not by its code; `KREAD` gives
+a 264 back as the last key's code, as the ROMs do.  The suite skips when
+the game is not built, unless its folder is named (`--saper-dir=`), as CI
+names it after building the game.
+
+The text is drawn in the machine's own 8x8 font: `gen_saper.py` takes
+the glyphs from the emulator's ROM-B image (`src/assets/rom/`), each of
+the two tables found by the shape of one glyph, KOI-8 040..0177 and
+0300..0377.
 
 ## Controls
 

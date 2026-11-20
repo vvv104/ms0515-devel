@@ -54,14 +54,14 @@ def mtab(cmap):
 
 KSCAN_NOTE = """        ; --- KSCAN: drain the MS7004 keyboard into the control state -----------
         ; The original reads 9 definable keys (8 directions + fire) per player.
-        ; The MS7004 sends make codes only: no release codes, auto-repeat for
-        ; the LAST regular key, modifiers emit their own code on every press
-        ; and ALL-UP once everything is released.  So each control (UP, DOWN,
-        ; LEFT, RIGHT, FIRE) of each player has a hold timer: a key's make /
-        ; repeat code sets its timer to KTMR frames, and - the CHORD rule -
-        ; refreshes every other timer still running: keys pressed together
-        ; stay "held" as long as any one of them repeats (the keyboard only
-        ; repeats the last one).  A key released less than KTMR before the
+        ; The MS7004 sends make codes only: no release codes, auto-repeat by
+        ; the metronome code 264 for the LAST regular key, modifiers emit
+        ; their own code on every press and ALL-UP once everything is
+        ; released.  So each control (UP, DOWN, LEFT, RIGHT, FIRE) of each
+        ; player has a hold timer: a key's make code sets its timer to KTMR
+        ; frames, and every code - 264 too - refreshes every other timer
+        ; still running (the CHORD rule): keys pressed together stay "held"
+        ; as long as the keyboard repeats (it repeats the last one only).  A key released less than KTMR before the
         ; next press is read as part of the chord - the price of a keyboard
         ; without release codes.  Each player's keys are a table of (scancode,
         ; bits) pairs - the defaults DEF1 (the keypad, the arrows, Space / VR /
@@ -97,8 +97,8 @@ KS1:    MOVB    @#177440,R0          ; read the scancode
         BNE     2$
         BR      KS0
 1$:     JSR     PC,KREFR             ; any key event: refresh the running timers
-        CMP     R0,#254              ; auto-repeat code (real MS7004): that is all
-        BEQ     KS0
+        CMP     R0,#264              ; the metronome, the firmware's repeat of
+        BEQ     KS0                  ;   the last key: the refresh is all it does
         CMP     R0,#300              ; "1": start a 1-player game from the demo
         BNE     15$
         MOV     #1,KSTART

@@ -483,6 +483,45 @@ TEST_CASE("fist: \"0\" in the demo opens the settings screen ($8C54)")
     CHECK(g.gst(0xB2FA) == 1);
 }
 
+TEST_CASE("fist: the keys redefined - nine asked, a held key counts once")
+{
+    /* "0", "1", "4": the key redefinition ($8D99), nine keys asked one at a
+     * time, then the demo again.  The first key is held past the keyboard's
+     * delay: it sends its code, then 264 - the metronome - while it stays
+     * down, and a repeat must not answer the next question.  Eight more keys
+     * finish the nine. */
+    if (!fist::built()) { MESSAGE("FIST not built - skipping"); return; }
+    FistGame g("fist_redefine_lib");
+    REQUIRE(g.gst(0xAA06) == 1);                    // the attract demo
+    auto blueCells = [&]() {
+        const uint8_t *v = g.vram();
+        int n = 0;
+        for (int r = 4; r < 196; ++r)
+            for (int c = 4; c < 36; ++c) if (v[r * 80 + c * 2 + 1] == 0x0D) ++n;
+        return n;
+    };
+    g.keyTap(ms0515::Key::Digit0);
+    g.settle(30);
+    g.keyTap(ms0515::Key::Digit1);
+    g.settle(30);
+    g.keyTap(ms0515::Key::Digit4);
+    g.settle(30);
+    REQUIRE(blueCells() == 32 * 192);               // the redefinition's screen
+    g.emu.keyPress(ms0515::Key::Q, true);
+    g.settle(40);                                   // repeating
+    g.emu.keyPress(ms0515::Key::Q, false);
+    g.settle(10);
+    for (ms0515::Key k : {ms0515::Key::W, ms0515::Key::E, ms0515::Key::A, ms0515::Key::S,
+                          ms0515::Key::D, ms0515::Key::Z, ms0515::Key::X}) {
+        g.keyTap(k);
+        g.settle(10);
+    }
+    CHECK(blueCells() == 32 * 192);                 // eight answered, the ninth asked
+    g.keyTap(ms0515::Key::C);
+    g.settle(60);
+    CHECK(blueCells() < 32 * 192 / 4);              // nine: back to the demo
+}
+
 TEST_CASE("fist: 2 in the demo starts a 2-player game; player 2 on Q W E / A S D / Z X C")
 {
     if (!fist::built()) { MESSAGE("FIST not built - skipping"); return; }

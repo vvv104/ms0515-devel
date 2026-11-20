@@ -5,7 +5,7 @@ when the GCC version moves).
 
     patch-gcc.py <gcc source tree>
 
-The fault (README.md, "A trap in the compiler"): cmpsi and cmpdi compare
+The fault (README.md, "The patches, and why"): cmpsi and cmpdi compare
 the high words, and when those are equal the low words, and the one
 conditional branch that follows reads the flags of whichever compare
 ran last.  A signed branch (bgt, bge, blt, ble) on the low words'
